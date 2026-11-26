@@ -34,7 +34,7 @@
       "maxItems": 256,
       "uniqueItems": true,
       "items": { "type": "string" },
-      "description": "enumerate only, and required there. The constants the models are told apart by, 1 to 256: two models that give them the same values are one model. Each is the name of a constant the problem declares, and none is named twice."
+      "description": "enumerate only, and required there. The constants the models are told apart by, 1 to 256: two models that give them the same values are one model. Each is the name of a constant the problem declares, and none is named twice. A constant of any sort can be named. Where its values hold an element of a sort the problem only declares (declare-sort), the solver names that element itself and does not take it back when a found model is ruled out: the enumeration then ends at the first model that holds one, not complete, with the models it found."
     },
     "max_models": {
       "type": "integer",

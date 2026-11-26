@@ -35,8 +35,23 @@ internal static class SmtWorkerPool
     /// <param name="body">The work for one index; may run concurrently with itself.</param>
     /// <param name="cancellationToken">Once cancelled, no further index starts; the indices already running finish, then the call throws.</param>
     /// <exception cref="OperationCanceledException">The token was cancelled before every index ran.</exception>
-    /// <exception cref="Exception">The first exception a worker threw, rethrown after every worker stopped.</exception>
+    /// <exception cref="Exception">The first exception a worker threw, or what kept a worker's thread from starting, rethrown after every worker that was started has stopped.</exception>
     public static void Run(int count, int degree, Action<int> body, CancellationToken cancellationToken = default)
+    {
+        Run(count, degree, body, WasmHostGuestThread.Create, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> as <see cref="Run(int, int, Action{int}, CancellationToken)"/> does, on threads made as told.
+    /// </summary>
+    /// <param name="count">Number of work items.</param>
+    /// <param name="degree">Upper bound on concurrent workers; clamped to <c>[1, count]</c>.</param>
+    /// <param name="body">The work for one index; may run concurrently with itself.</param>
+    /// <param name="makeThread">Makes a worker's thread, not started.</param>
+    /// <param name="cancellationToken">Once cancelled, no further index starts; the indices already running finish, then the call throws.</param>
+    /// <exception cref="OperationCanceledException">The token was cancelled before every index ran.</exception>
+    /// <exception cref="Exception">The first exception a worker threw, or what kept a worker's thread from starting, rethrown after every worker that was started has stopped.</exception>
+    public static void Run(int count, int degree, Action<int> body, Func<Action, Thread> makeThread, CancellationToken cancellationToken = default)
     {
         if (count <= 0)
             return;
@@ -45,36 +60,47 @@ internal static class SmtWorkerPool
         var next = -1;
         Exception? failure = null;
 
-        var threads = new Thread[workers];
+        var threads = new List<Thread>(workers);
         for (var worker = 0; worker < workers; worker++)
         {
-            var thread = WasmHostGuestThread.Create(() =>
+            try
             {
-                while (true)
+                var thread = makeThread(() =>
                 {
-                    if (Volatile.Read(ref failure) != null || cancellationToken.IsCancellationRequested)
-                        return;
-
-                    var index = Interlocked.Increment(ref next);
-                    if (index >= count)
-                        return;
-
-                    try
+                    while (true)
                     {
-                        body(index);
+                        if (Volatile.Read(ref failure) != null || cancellationToken.IsCancellationRequested)
+                            return;
+
+                        var index = Interlocked.Increment(ref next);
+                        if (index >= count)
+                            return;
+
+                        try
+                        {
+                            body(index);
+                        }
+                        catch (Exception exception)
+                        {
+                            Interlocked.CompareExchange(ref failure, exception, null);
+                            return;
+                        }
                     }
-                    catch (Exception exception)
-                    {
-                        Interlocked.CompareExchange(ref failure, exception, null);
-                        return;
-                    }
-                }
-            });
-            thread.IsBackground = true;
-            thread.Name = $"{WORKER_NAME}-{worker}";
-            thread.Priority = WORKER_PRIORITY;
-            threads[worker] = thread;
-            thread.Start();
+                });
+                thread.IsBackground = true;
+                thread.Name = $"{WORKER_NAME}-{worker}";
+                thread.Priority = WORKER_PRIORITY;
+                thread.Start();
+                threads.Add(thread);
+            }
+            catch (Exception exception)
+            {
+                // No thread for this worker. The workers already started take no further index
+                // and are waited for below, before the caller is told: the caller's own things
+                // (a sandbox, a file) are still in use while one of them runs.
+                Interlocked.CompareExchange(ref failure, exception, null);
+                break;
+            }
         }
 
         foreach (var thread in threads)

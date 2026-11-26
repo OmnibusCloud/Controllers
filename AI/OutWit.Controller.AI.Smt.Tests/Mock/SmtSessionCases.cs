@@ -172,10 +172,21 @@ internal static class SmtSessionCases
         Add("enumerate-memory-after-the-last-check", enumerate, "ok sat memout 2 incomplete", complete, new SmtScriptedEnd { ExitCode = 101 });
         Add("enumerate-memory-after-its-word", enumerate, "ok sat memout 1 incomplete", [.. one, SILENT, UNKNOWN, COUNTED, Reason("\"memout\"")], new SmtScriptedEnd { ExitCode = 101 });
 
+        // enumerate: the solver did not take a found model's values back (it said something to the
+        // assertion that rules the model out). The models found are kept and the enumeration is
+        // incomplete by the solver's own word, whatever status the solver then ends with for the
+        // error it counted; a budget that ends the session after it says so in its place.
+        Add("enumerate-error-in-the-block", enumerate, "ok sat other 1 incomplete", [.. one, ERROR]);
+        Add("enumerate-error-in-the-block-counted", enumerate, "ok sat other 1 incomplete", [.. one, ERROR], new SmtScriptedEnd { ExitCode = 1 });
+        Add("enumerate-error-in-the-second-block", enumerate, "ok sat other 2 incomplete", [.. both, ERROR], new SmtScriptedEnd { ExitCode = 1 });
+        Add("enumerate-words-in-answer-to-the-block", enumerate, "ok sat other 1 incomplete", [.. one, "unsupported\n"]);
+        Add("enumerate-fuel-after-the-block", enumerate, "ok sat fuel 1 incomplete", [.. one, ERROR], Ended("OutOfFuel"));
+        Add("enumerate-exit-after-the-block", enumerate, "engine_crash exit", [.. one, ERROR], new SmtScriptedEnd { ExitCode = 110 });
+
         // enumerate: errors, crashes, the output cap and faults, with and without a model kept.
         Add("enumerate-error-in-the-values", enumerate, "input_error", [SILENT, SAT, COUNTED, ERROR]);
         Add("enumerate-error-in-the-model", enumerate, "input_error", [SILENT, SAT, COUNTED, X7, ERROR]);
-        Add("enumerate-error-in-the-block", enumerate, "input_error", [.. one, ERROR]);
+        Add("enumerate-error-in-the-second-values", enumerate, "input_error", [.. one, SILENT, SAT, COUNTED, ERROR]);
         Add("enumerate-values-unreadable", enumerate, "engine_crash unreadable_answer", [SILENT, SAT, COUNTED, "((y 3))\n"]);
         Add("enumerate-model-empty", enumerate, "engine_crash unreadable_answer", [SILENT, SAT, COUNTED, X7, SILENT]);
         Add("enumerate-trap-with-a-model", enumerate, "engine_crash trap", [.. one, SILENT], new SmtScriptedEnd { Verdict = "Trap", ExitCode = -1 });

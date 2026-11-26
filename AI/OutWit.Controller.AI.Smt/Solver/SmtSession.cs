@@ -23,7 +23,10 @@ namespace OutWit.Controller.AI.Smt.Solver;
 /// terms its row names), the reason after <c>unknown</c>. An <c>enumerate</c> asks, after each
 /// <c>sat</c>, the values of the projected constants and the model, then asserts that not all
 /// of those constants have those values and checks again, until it has its number of models, a
-/// check says <c>unsat</c> (the count is exact) or <c>unknown</c>.
+/// check says <c>unsat</c> (the count is exact) or <c>unknown</c>. That assertion is the
+/// controller's own, made of what the solver printed: when the solver says anything to it, it
+/// did not take a value back as it wrote it, and the enumeration ends there with the models it
+/// has, incomplete (<see cref="OnBlocked"/>).
 /// </para>
 /// <para>
 /// A session serves one run, on the thread the solver runs on, and decides nothing by a clock.
@@ -276,10 +279,24 @@ internal sealed class SmtSession
         return Send(SmtScripts.GetModel());
     }
 
+    /// <summary>
+    /// The answer to the assertion that rules the found model out: nothing, and the next check.
+    /// Anything else is the solver not taking a value back as it printed it (its own name for an
+    /// element of a sort the problem only declares, or a form it writes and does not read under
+    /// the problem's logic). The assertion is the controller's, so this is no error
+    /// in what the problem's author gave: the models found are whole and true, and what cannot be
+    /// known is whether there are more, since the next check would find the last one again. The
+    /// enumeration ends here, incomplete, with the solver's answer for its reason.
+    /// </summary>
     private ReadOnlyMemory<byte> OnBlocked(string answer)
     {
-        // The assertion that rules the found model out is answered by nothing.
-        return SmtAnswers.IsBlank(answer) ? Check() : Fail(SmtSolveStatus.InputError, "", SmtAnswers.Message(answer));
+        if (SmtAnswers.IsBlank(answer))
+            return Check();
+
+        m_record.BlockRefused = true;
+        m_record.Reason = SmtUnknownReason.Other;
+        m_record.ReasonText = SmtAnswers.Message(answer);
+        return End();
     }
 
     private ReadOnlyMemory<byte> Check()

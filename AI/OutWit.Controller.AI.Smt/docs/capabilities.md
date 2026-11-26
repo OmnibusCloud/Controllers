@@ -95,6 +95,13 @@ reader, the sanitizer and their refusal codes are the model package's
 application, on the server and on the node. A refused row costs nothing and has its row in the
 results.
 
+An enumeration tells the solver a found model's values back to rule the model out. The pinned
+solver takes back every value but the elements of a sort a problem only declares
+(`declare-sort`), which it names itself inside one model (`U!val!0`). A row projected on a
+constant whose values hold such an element (the sort itself, or an array, a sequence or a
+datatype over it) is taken like any other, and its enumeration ends at the first model that
+holds one: an answer with the models it found, `complete` false, for the reason `other`.
+
 ## 5. What comes back
 
 ### The results ([`smt-results.schema.json`](smt-results.schema.json))
@@ -105,7 +112,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 |---|---|
 | `index`, `id`, `query`, `logic` | the row; `query` and `logic` for a taken problem only |
 | `status`, `code`, `message` | `ok`, `refused` (by the set or the server's sanitizer), `input_error`, `output_exceeded`, `engine_crash`, or the server's `no_result` (no node answered, after the repair round either; `code` says what the nodes said last, `node_refused` when every node refused the problem) and `disputed` (copies disagreed and three more did not settle it; `code` is the dispute's outcome) |
-| `verdict`, `reason` | `sat`, `unsat`, `unknown` (with `rlimit`, `fuel`, `memout`, `incomplete` or `other`), `none` |
+| `verdict`, `reason` | `sat`, `unsat`, `unknown` (with `rlimit`, `fuel`, `memout`, `incomplete` or `other`), `none`. An enumeration that is neither complete nor at its number of models has the reason it stopped for, beside `sat` when it found a model; `other` there also says that the solver did not take a found model's values back (see "Known limits") |
 | `expected`, `expected_agreement` | the verdict the row or the problem's `:status` expects, and `agree`, `disagree` or `n/a` |
 | `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
 | `proof` | a proof: `proved` or `counterexample` |
@@ -271,3 +278,15 @@ one package reference, an answer one result reference.
   on a slow machine, by the node's wall-clock backstop, which makes it a fault of the node and
   sends it once more.
 - The report lists every problem of the long tail: its size grows with the set.
+- An enumeration ends early where the solver prints a value in a form it does not take back:
+  the row is `ok`, `sat`, with the models found, `complete` false and the reason `other`. What
+  is not known then is whether there are more models. Two such forms are known for the pinned
+  solver. An element of a sort the problem only declares (`declare-sort`) is named by the solver
+  itself (`U!val!0`) and taken in no later command: an enumeration projected on a constant of
+  such a sort ends after its first model, and one over an array, a sequence or a datatype of
+  such a sort at the first model whose value holds an element. And an array that is the
+  identity is printed as a function (`(lambda ((x!1 Bool)) x!1)`), which a logic without
+  quantifiers does not take; without a logic, or under one with quantifiers, it is read back
+  and the enumeration goes on. An enumeration that never has to rule such a model out is not
+  touched by this: one model asked for, a problem with no model, values that hold no such
+  element.

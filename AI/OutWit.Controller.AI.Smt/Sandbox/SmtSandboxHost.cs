@@ -68,11 +68,35 @@ internal static class SmtSandboxHost
             if (m_instance != null)
                 return m_instance;
 
-            var storage = Volatile.Read(ref m_tempStorage);
-            m_instance = Create(SmtModuleLocator.Locate(), storage?.CreateScope(SCOPE_LABEL), out problem);
+            m_instance = Make(SmtModuleLocator.Locate(), Volatile.Read(ref m_tempStorage), out problem);
             Volatile.Write(ref m_lastProblem, problem);
             return m_instance;
         }
+    }
+
+    /// <summary>
+    /// Makes a sandbox whose own files of a run live in a scope of a temp storage, or says in fixed
+    /// words why there is none. A process that has no sandbox asks again at every package and at
+    /// every benchmark, so an attempt that fails leaves nothing behind: the scope is made only
+    /// when what can be known without it allows a sandbox (the binding, a module file), and it is
+    /// given back when no sandbox comes of it.
+    /// </summary>
+    /// <param name="modulePath">The module file, or null when none was found.</param>
+    /// <param name="storage">The host's temp storage, or null for a folder in the operating system's temp path.</param>
+    /// <param name="problem">Why no sandbox was made; null when one was.</param>
+    /// <returns>The sandbox, or null.</returns>
+    public static SmtSandbox? Make(string? modulePath, IWitTempStorage? storage, out string? problem)
+    {
+        problem = Unavailable(modulePath);
+        if (problem != null)
+            return null;
+
+        var scope = storage?.CreateScope(SCOPE_LABEL);
+        var sandbox = Create(modulePath, scope, out problem);
+        if (sandbox == null && scope != null)
+            GiveBack(storage!, scope);
+
+        return sandbox;
     }
 
     /// <summary>
@@ -84,19 +108,13 @@ internal static class SmtSandboxHost
     /// <returns>The sandbox, or null.</returns>
     public static SmtSandbox? Create(string? modulePath, string? ioDirectory, out string? problem)
     {
-        problem = WasmHostBinding.Problem;
+        problem = Unavailable(modulePath);
         if (problem != null)
             return null;
 
-        if (modulePath == null)
-        {
-            problem = $"the solver module ({SmtModuleLocator.RelativePath}) is not in the controller's folder";
-            return null;
-        }
-
         try
         {
-            return new SmtSandbox(modulePath, ioDirectory);
+            return new SmtSandbox(modulePath!, ioDirectory);
         }
         catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException or Wasmtime.WasmtimeException)
         {
@@ -109,6 +127,30 @@ internal static class SmtSandboxHost
             // These name a file of the machine: the kind of failure is enough.
             problem = $"the solver's sandbox cannot start: {exception.GetType().Name} reading the module or loading the engine library";
             return null;
+        }
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>What is known against a sandbox before anything is made for it: another binding in the process, no module file.</summary>
+    private static string? Unavailable(string? modulePath)
+    {
+        return WasmHostBinding.Problem
+               ?? (modulePath == null ? $"the solver module ({SmtModuleLocator.RelativePath}) is not in the controller's folder" : null);
+    }
+
+    /// <summary>Hands a scope back to the storage that made it; a storage that cannot take it back keeps it for its owner's own sweep.</summary>
+    private static void GiveBack(IWitTempStorage storage, string scope)
+    {
+        try
+        {
+            storage.DeleteScope(scope);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // an empty folder inside the host's own storage
         }
     }
 

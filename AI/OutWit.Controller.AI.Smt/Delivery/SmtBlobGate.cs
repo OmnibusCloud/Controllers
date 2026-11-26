@@ -11,7 +11,9 @@ namespace OutWit.Controller.AI.Smt.Delivery;
 /// A transfer has a time to finish in. The blob channel's calls take no token, and one that never
 /// returns would hold the gate's one slot, and with it every transfer of every job on the node,
 /// for as long as the process lives. A transfer that runs out of its time counts as failed: the
-/// slot is free again, and the caller may try once more.
+/// slot is free again, and the caller may try once more. The call itself goes on, since nothing
+/// can stop it: the next transfer passes the gate beside it, and the caller that gave it up waits
+/// for it a little longer before it tries again (<see cref="SmtPackageTransfer"/>).
 /// </para>
 /// </summary>
 internal sealed class SmtBlobGate

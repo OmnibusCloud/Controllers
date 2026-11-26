@@ -87,18 +87,27 @@ one outcome. It throws for nothing a problem or the solver holds.
 | Query | What is sent after the options, the problem and the resource limit |
 |---|---|
 | `check` | `(check-sat)` and the statistics; after `sat` the model and the values of the terms the row asks for; after `unknown` the reason |
-| `enumerate` | `(check-sat)` and the statistics; after `sat` the values of the projected constants and the model, then the assertion that not all of those constants have those values, and the next check; until the number of models is reached, or a check says `unsat` (the count is exact) or `unknown` |
+| `enumerate` | `(check-sat)` and the statistics; after `sat` the values of the projected constants and the model, then the assertion that not all of those constants have those values, and the next check; until the number of models is reached, or a check says `unsat` (the count is exact) or `unknown`, or the solver says anything to that assertion (it did not read a value back as it printed it: the enumeration ends there with the models it has) |
 | `prove` | the negated goal with the problem, then as `check`: `unsat` is proved, `sat` is a counterexample with its model |
 
 No `set-info` of a problem reaches the solver, and no command of the problem's own asks it to act.
+
+The names of a projection are held to the problem by one check, the model package's
+`SmtProjection`: the reader of a problem set makes it when the set is read, and a node makes it
+again of what travelled to it, so a node refuses no projection the host took. The sort of a
+projected constant is no ground for a refusal. An enumeration says a found model's values back
+to the solver, and the solver does not take every value back: it names the elements of a sort
+the problem only declares (`declare-sort`) by names of its own. An enumeration over such values
+ends at the first model that holds one, not complete, with the models it found (the model
+package's README says so in full).
 
 ## The outcome
 
 | Status | When |
 |---|---|
 | `ok` | the query was answered: `sat`, `unsat`, or `unknown` with its reason |
-| `refused` | the options or the problem were not taken; no solver ran. The code is the sanitizer's, or `hash_mismatch`, `profile_unknown`, `options_invalid` |
-| `input_error` | the solver reported an error in what it was given, or said anything at all to a statement (a logic it does not know); its message is kept, cut to 512 characters |
+| `refused` | the options or the problem were not taken; no solver ran. The code is the sanitizer's or a row's, or `hash_mismatch`, `profile_unknown`, `options_invalid` |
+| `input_error` | the solver reported an error in what it was given, or said anything at all to a statement of the problem's (a logic it does not know); its message is kept, cut to 512 characters |
 | `output_exceeded` | the session wrote more than its output cap. The verdict of a check the solver had answered by then stands: it said `sat`, and it is the model that did not fit |
 | `engine_crash` | a trap, an exit status that is no answer, an answer that cannot be read |
 | `node_fault` | the machine, not the problem: no sandbox, the wall-clock backstop, a cancelled session, a file the host could not use |
@@ -109,7 +118,7 @@ No `set-info` of a problem reaches the solver, and no command of the problem's o
 | `fuel` | the session's fuel ran out |
 | `memout` | the solver was refused memory: its exit status 101 with its line `(error "out of memory")`, or the sandbox's cap of the heap its exceptions live in |
 | `incomplete` | the solver's own word |
-| `other` | any other word of the solver's, which the outcome keeps |
+| `other` | any other word of the solver's, which the outcome keeps. Also the reason of an enumeration that ended, its models kept and not complete, because the solver did not take a found model's values back: the word kept is what the solver said to the assertion (the pinned solver names the elements of a sort a problem only declares by names of its own, and prints an array that is the identity as a function, which a logic without quantifiers does not read) |
 
 Beside them the outcome holds, for an enumeration, the count and whether it is complete; for a
 proof, proved or counterexample; the models and the values as the solver printed them, for the
@@ -120,7 +129,13 @@ text, and the answers).
 Everything in an outcome but the measured wall time is a function of the problem, the options
 and the module: the tests hold forty-one problems to one file of hashes and fuel on Windows,
 Linux and macOS, hold a host with explicit trap checks to one with hardware traps, and hold
-eight sessions at once to the same sessions one by one.
+eight sessions at once to the same sessions one by one. Sixteen more problems are nested as deep
+as the reader takes one (chains of additions, of connectives, of bindings and of conditionals,
+25,000 to 100,000 lists deep): the solver's own code calls itself a level of such a term, and
+the native stack a guest is given holds a number of calls that is the compiler's for the
+machine, so these are the problems on which two machines could have parted. They do not: their
+rows are held to a file of digests and fuel of their own on the three platforms, in both trap
+modes.
 
 ## A package on a node
 
@@ -131,7 +146,9 @@ report it carry references only. `Smt.SolvePackage` is given an `SmtTaskPackageD
    version the job runs on is this node's, the ticket is 32 lower-case hex characters, there is
    a blob, there are options, 1 to 256 problems, a blob of at most 257 MiB;
 2. downloads the blob over the node's blob channel (in chunks, resumed after a break, tried again
-   for about five minutes; a few downloads of a share at once, the first transfer of all alone);
+   for about five minutes; a few downloads of a share at once, the first transfer of all alone;
+   an attempt that runs out of its time cannot be stopped, so it is waited for half a minute more
+   before another is made, and what it comes to in that time is taken);
 3. holds the blob to its reference: its size, its SHA-256, and that it holds exactly the problems
    the reference names (their number and the digest of their indices);
 4. waits for its turn on the node's budget of sessions (below), then makes the process's

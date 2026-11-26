@@ -10,8 +10,8 @@ namespace OutWit.Controller.AI.Smt.Activities;
 
 /// <summary>
 /// The node's primitive: a node solves a package of problems. The activity is given a reference
-/// (<c>SmtTaskPackage</c>); the node downloads the package's blob, solves its problems with a pool
-/// of sessions of the pinned solver, writes a row of each to a blob and returns the reference to it
+/// (<c>SmtTaskPackage</c>); the node downloads the package's blob, solves its problems, each in a
+/// session of its own of the pinned solver, writes a row of each to a blob and returns the reference to it
 /// (<c>SmtResultPackage</c>). A function of its input: the same package gives the same rows on
 /// every node, so a retry or a copy elsewhere is safe. A node starts every package of its share
 /// together so that the blobs arrive ahead of the work; the problems of its packages share one

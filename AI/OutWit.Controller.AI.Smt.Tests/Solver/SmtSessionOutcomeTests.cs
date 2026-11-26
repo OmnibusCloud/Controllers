@@ -96,20 +96,45 @@ public sealed class SmtSessionOutcomeTests
         });
     }
 
-    [Test]
-    public void AnErrorInAnswerToTheAssertionThatRulesAModelOutIsAnInputErrorThatKeepsTheModelsTest()
+    [TestCase(0, TestName = "{m}(the solver ends with status 0)")]
+    [TestCase(1, TestName = "{m}(the solver ends with status 1, for the error it counted)")]
+    public void AnErrorInAnswerToTheAssertionThatRulesAModelOutEndsTheEnumerationWithItsModelsTest(int exitCode)
     {
+        // The assertion is the controller's own, made of the values the solver printed: an error
+        // in answer to it is the solver not reading a value back, and no error of the problem's.
+        // The model that was found is whole and true; that there is no other is what is not known.
         var problem = SmtSolverProblems.Enumerate("enumerate", PROBLEM, 10, "x");
 
-        var held = SmtSessionScript.Hold(problem, new SmtOptionsData(), [SILENT, SAT, COUNTED, "((x 7))\n", A_MODEL, "(error \"line 12 column 20: unknown constant k!0\")\n"]);
+        var held = SmtSessionScript.Hold(problem, new SmtOptionsData(), [SILENT, SAT, COUNTED, "((x 7))\n", A_MODEL, "(error \"line 12 column 20: unknown constant k!0\")\n"],
+            new SmtScriptedEnd { ExitCode = exitCode });
 
         Assert.Multiple(() =>
         {
-            Assert.That(held.Outcome.Words(), Is.EqualTo("input_error"));
-            Assert.That(held.Outcome.Message, Is.EqualTo("line 12 column 20: unknown constant k!0"));
-            Assert.That(held.Outcome.Models, Has.Count.EqualTo(1), "what was whole is kept for whoever looks into it");
+            Assert.That(held.Outcome.Words(), Is.EqualTo("ok sat other 1 incomplete"));
+            Assert.That(held.Outcome.ReasonText, Is.EqualTo("line 12 column 20: unknown constant k!0"), "the solver's answer is kept as its word for the end");
+            Assert.That(held.Outcome.Message, Is.Empty, "an answered query carries no message");
+            Assert.That(held.Outcome.Models, Has.Count.EqualTo(1));
+            Assert.That(held.Outcome.Values, Is.EqualTo(new[] { "((x 7))\n" }));
             Assert.That(held.Outcome.Count, Is.EqualTo(1));
             Assert.That(held.Outcome.Complete, Is.False);
+            Assert.That(held.Outcome.LimitReached, Is.False);
+            Assert.That(held.Outcome.Checks, Is.EqualTo(1), "no check is sent after an assertion the solver did not take");
+            Assert.That(held.Ended, Is.True, "the session ends the input itself");
+            Assert.That(held.Sent[^1], Is.EqualTo("(assert (not (= x 7)))\n"), "and sends nothing after the assertion");
+        });
+    }
+
+    [Test]
+    public void TheSolversAnswerToTheAssertionIsCutAsEveryMessageOfItsIsTest()
+    {
+        var problem = SmtSolverProblems.Enumerate("enumerate", PROBLEM, 10, "x");
+
+        var held = SmtSessionScript.Hold(problem, new SmtOptionsData(), [SILENT, SAT, COUNTED, "((x 7))\n", A_MODEL, "(error \"" + new string('k', 2_000) + "\")\n"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(held.Outcome.Words(), Is.EqualTo("ok sat other 1 incomplete"));
+            Assert.That(held.Outcome.ReasonText, Is.EqualTo(new string('k', 512)));
         });
     }
 

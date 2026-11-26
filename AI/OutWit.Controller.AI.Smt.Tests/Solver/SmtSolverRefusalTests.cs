@@ -19,6 +19,12 @@ public sealed class SmtSolverRefusalTests
     private const string PROBLEM = "(set-logic QF_LIA)(declare-const x Int)(declare-const y Int)(assert (= (+ x y) 10))";
     private const string NO_SANDBOX = "a machine without a sandbox";
 
+    /// <summary>What a node without a sandbox says of a problem its plan took: a fault of the node, no refusal.</summary>
+    private const string NOT_REFUSED = "node_fault sandbox_unavailable";
+
+    /// <summary>A problem to project on: two constants, and a function that is none.</summary>
+    private const string PROJECTED = "(declare-const x Int)(declare-const y Int)(declare-fun f (Int) Int)";
+
     #endregion
 
     #region Options Tests
@@ -216,6 +222,59 @@ public sealed class SmtSolverRefusalTests
             Assert.That(Solve(twice, new SmtOptionsData()).Words(), Is.EqualTo($"refused {SmtRefusalCodes.FIELD_INVALID}"));
             Assert.That(Solve(term, new SmtOptionsData()).Words(), Is.EqualTo($"refused {SmtRefusalCodes.FIELD_INVALID}"));
             Assert.That(Solve(tooMany, new SmtOptionsData()).Words(), Is.EqualTo($"refused {SmtRefusalCodes.FIELD_INVALID}"));
+        });
+    }
+
+    #endregion
+
+    #region Projection Tests
+
+    [TestCase(SmtRefusalCodes.UNKNOWN_CONSTANT, "z")]
+    [TestCase(SmtRefusalCodes.UNKNOWN_CONSTANT, "x|f")]
+    [TestCase(SmtRefusalCodes.FIELD_INVALID, "x|y|x")]
+    [TestCase(SmtRefusalCodes.FIELD_INVALID, "(+ x 1)")]
+    public void AProjectionTheReaderOfASetRefusesIsRefusedByANodeInTheSameWordsTest(string code, string names)
+    {
+        // A node reads again what travelled to it, by the check the reader of the set made. A
+        // problem a host of this controller would never send (the reader refuses its row) is
+        // refused by the node with the same code and the same reason.
+        var one = new SmtProjectionCase("a", PROJECTED, 2, names.Split('|'), "");
+        var host = Problems.SmtProblemSets.Read(one.Row()).Rows.Single().Refusal;
+
+        var solved = Solve(one.Problem(), new SmtOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(host?.Code, Is.EqualTo(code), host?.Reason);
+            Assert.That(solved.Words(), Is.EqualTo($"refused {code}"));
+            Assert.That(solved.Message, Is.EqualTo(host?.Reason));
+            Assert.That(solved.Fuel, Is.Zero, "no session ran");
+            Assert.That(solved.Checks, Is.Zero);
+            Assert.That(solved.Transcript, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void ANodeRefusesNoProjectionTheReaderOfASetTookTest()
+    {
+        // The property the two ends are held to: whatever the reader of a set takes, a node's
+        // plan takes (a node without a sandbox then says that it has none, which is no refusal).
+        // The sort of a projected constant is no ground for a refusal at either end: the cases
+        // are constants of every kind of sort, the ones the problem only declares among them.
+        Assert.Multiple(() =>
+        {
+            foreach (var one in SmtProjectionCases.All)
+            {
+                var row = Problems.SmtProblemSets.Read(one.Row()).Rows.Single();
+                var node = Solve(one.Problem(), new SmtOptionsData());
+
+                Assert.That(row.IsAccepted, Is.True, $"{one.Id}: the reader of the set ({row.Refusal?.Code})");
+                Assert.That(node.Words(), Is.EqualTo(NOT_REFUSED), $"{one.Id}: the node's plan");
+
+                // And what a host sends is what the node took: the row's own problem, as it travels.
+                if (row.IsAccepted)
+                    Assert.That(Solve(row.Data, new SmtOptionsData()).Words(), Is.EqualTo(NOT_REFUSED), $"{one.Id}: the row the reader made");
+            }
         });
     }
 

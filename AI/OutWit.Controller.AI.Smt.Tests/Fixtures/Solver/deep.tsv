@@ -1,0 +1,21 @@
+# The rows a node returns for the problems nested as deep as the reader takes them (Mock/SmtDeepProblems.cs):
+# the digest of each row (SmtResultData.Digest), which leaves the wall time, the platform, the controller
+# version and the ticket out, and its fuel. The same on every platform and in both trap modes;
+# SmtSolverDeepNestingTests holds every run to this file and says how it is rewritten.
+id	digest	fuel
+check-deep-plus-25000	76e7f1f4859f0bb56917817fc7bd963c1893ac6de28b6fa0ef1da86871044966	319357357
+check-deep-plus-50000	0fa47a7136f86081bc63632b4b5b947069091c5d2947d05219ef24566a81a7db	617080128
+check-deep-plus-75000	c1d6faeaeede9ff474f785178cd82b03063539ccee4f7b50b7f863f7dc4c83f8	931297548
+check-deep-plus-100000	4d5a4dbeceee49c11a75525c6413245cc62e231cd42d5de5de7597fe0bc83ab3	1264419111
+check-deep-and-or-25000	006eb8ac9b8f1ca26565a9f0d6b0689cc06270ec179133833a3ad3292528b373	481928833
+check-deep-and-or-50000	5c2f3afceb0df11a04fd5dc98041e23a0e9026914d974564c4a0e879053420a9	969463448
+check-deep-and-or-75000	ac7946bf9f449d9e8816d0d7dab4f8b8f7d3a31c5a320addc75fb0d94e9d7824	1441810858
+check-deep-and-or-100000	0632d125096bc7139c5f6def1ed8a740b3d2eae01408d9d593566ba61897dc49	1945884908
+check-deep-let-25000	5d145eee60114a2c3895046ba7c98a9fc9c5bcf24193cdd0aa6cbe8573abd44b	624934137
+check-deep-let-50000	14094c73444ad1f10914e100c05b5643478952cc64b808eb04bb47c9ad17ebaa	1229456992
+check-deep-let-75000	768205049b420058a156795e2e2895605a48445d835b4def658ded9e96c41f6c	1833777870
+check-deep-let-100000	24989ee18b6e9b0f41496c690096d3a6c7bb91753f960376419da75b3a035c46	2453230256
+check-deep-ite-25000	979b4ada8a24691e3eee481a01e503e4d751e28bf5d759ce56767446d00e8b21	588910775
+check-deep-ite-50000	84b2ddd684d35614ddf1115e3accbb8d8f3ebd43b67c4498df2a443f3a9244b9	1156973921
+check-deep-ite-75000	80cd18afc2c9339594f28cd92a27868dc2ac2d44ff02c9b9eaa5b27891b204f0	1724700381
+check-deep-ite-100000	8907c80449b591550b688b352e6d023ab86ddd6eb27cb2a9eb7418dc830995e2	2307053401

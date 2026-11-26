@@ -85,42 +85,18 @@ internal sealed class SmtSolvePlan
 
     private SmtRefusalData? TakeProjection(SmtProblemData data, SmtEnvelope envelope)
     {
-        var texts = data.Project ?? [];
-        if (texts.Count == 0)
-            return Refuse(SmtRefusalCodes.FIELD_MISSING, "'project' is missing: an enumeration names the constants its models are told apart by");
-
-        if (texts.Count > SmtProblemSetLimits.MAX_PROJECT)
-            return Refuse(SmtRefusalCodes.FIELD_INVALID, $"'project' holds more than the {SmtProblemSetLimits.MAX_PROJECT} names allowed");
-
-        var declared = new Dictionary<string, SmtDeclaredConstant>(StringComparer.Ordinal);
-        foreach (var constant in Problem.Constants)
-            declared.TryAdd(constant.Name, constant);
-
-        var named = new HashSet<string>(StringComparer.Ordinal);
-        var constants = new List<SmtExpression>(texts.Count);
-        for (var index = 0; index < texts.Count; index++)
-        {
-            var term = SmtSanitizer.SanitizeTerm(texts[index] ?? "");
-            if (!term.IsAccepted)
-                return In(term.Refusal!, $"project[{index}]");
-
-            if (term.Term.Kind != SmtExpressionKind.Symbol)
-                return Refuse(SmtRefusalCodes.FIELD_INVALID, $"'project[{index}]' must be the name of a constant: one symbol");
-
-            if (!declared.TryGetValue(term.Term.Text, out var constant))
-                return Refuse(SmtRefusalCodes.UNKNOWN_CONSTANT, $"'project[{index}]' names what the problem does not declare as a constant");
-
-            if (!named.Add(constant.Name))
-                return Refuse(SmtRefusalCodes.FIELD_INVALID, $"'project[{index}]' names a constant again: a constant is named once");
-
-            constants.Add(constant.Symbol);
-        }
+        // The check the host's reader made of the row, made again of what travelled (the model
+        // package's SmtProjection): a node refuses no projection the host took, and takes none
+        // the host would have refused.
+        var refusal = SmtProjection.Take(Problem, data.Project ?? [], out var constants);
+        if (refusal != null)
+            return refusal;
 
         var models = data.MaxModels == 0 ? envelope.MaxModels : data.MaxModels;
         if (models < 1 || models > SmtOptionsRules.MAX_MODELS)
             return Refuse(SmtRefusalCodes.FIELD_INVALID, $"'max_models' must be between 1 and {SmtOptionsRules.MAX_MODELS}");
 
-        Projection = constants;
+        Projection = [.. constants.Select(constant => constant.Symbol)];
         MaxModels = models;
         return null;
     }

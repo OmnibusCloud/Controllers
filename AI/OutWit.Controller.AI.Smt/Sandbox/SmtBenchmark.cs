@@ -10,8 +10,10 @@ namespace OutWit.Controller.AI.Smt.Sandbox;
 
 /// <summary>
 /// The node benchmark of <c>Smt.SolvePackage</c>, a rate for the allocator: the reference set of
-/// thirty small problems (<see cref="SmtBenchmarkProblems"/>), the same on every node, solved by
-/// the pool at the node's degree as a package is, the set given enough times that each session
+/// thirty small problems (<see cref="SmtBenchmarkProblems"/>), the same on every node, solved at
+/// the node's degree by a pool of worker threads of the benchmark's own (<see cref="SmtWorkerPool"/>:
+/// a package's problems run on the node's budget of sessions instead, at the same degree when the
+/// node solves nothing else), the set given enough times that each session
 /// gets about <see cref="PROBLEMS_PER_WORKER"/> problems. A warm-up run first (the module is
 /// compiled before it, outside any timing), then timed runs until the target duration; the rate is
 /// problems a second of the median run. Every problem is held to the outcome and the fuel it has on

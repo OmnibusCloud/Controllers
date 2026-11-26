@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Profiles;
 using OutWit.Controller.AI.Smt.Sandbox;
 using OutWit.Controller.AI.Smt.Solver;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Smt.Tests.Mock;
 
@@ -147,13 +149,31 @@ internal static class SmtSolverRig
     /// </summary>
     /// <param name="problem">The problem as it travels.</param>
     /// <param name="options">The run's options, each in its range.</param>
+    /// <param name="logger">The node's own log, as a package's sessions have it; null for none.</param>
     /// <returns>The outcome.</returns>
-    public static SmtSolved SolveInAClosedSandbox(SmtProblemData problem, SmtOptionsData options)
+    public static SmtSolved SolveInAClosedSandbox(SmtProblemData problem, SmtOptionsData options, ILogger? logger = null)
     {
         var closed = (SmtSandbox)Explicit();
         Release();
 
-        return Take(SmtSolver.Solve(problem, options, closed, null));
+        return Take(SmtSolver.Solve(problem, options, closed, null, CancellationToken.None, logger));
+    }
+
+    /// <summary>
+    /// Makes a sandbox as the process-wide one is made, its own files in a scope of a temp storage,
+    /// and closes it again.
+    /// </summary>
+    /// <param name="modulePath">The module file, or null when none was found.</param>
+    /// <param name="storage">The host's temp storage.</param>
+    /// <param name="made">Called with the scopes the storage holds while the sandbox is open; not called when none was made.</param>
+    /// <returns>Why no sandbox was made, in the controller's fixed words; null when one was.</returns>
+    public static string? MakeAndClose(string? modulePath, IWitTempStorage storage, Action? made = null)
+    {
+        using var sandbox = SmtSandboxHost.Make(modulePath, storage, out var problem);
+        if (sandbox != null)
+            made?.Invoke();
+
+        return problem;
     }
 
     /// <summary>Releases the sandbox with explicit trap checks, when a test made one.</summary>

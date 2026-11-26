@@ -13,6 +13,19 @@ namespace OutWit.Controller.AI.Smt.Solver;
 /// something about the machine and nothing about the problem.
 /// </para>
 /// <para>
+/// Two things of the machine stand behind that claim without being counts of the profile. How
+/// deep the solver's own code may call itself is a number of bytes of native stack the sandbox
+/// gives a guest, and the bytes of one call are the compiler's for the machine: a problem that
+/// ended there would end as a crash on one machine and as an answer on another. The tests hold
+/// problems nested as deep as the reader takes one to the same row on Windows x64, Linux x64 and
+/// macOS arm64, in both trap modes; none ends there. And memory: a growth of its memory the
+/// solver is refused reaches it in one way whoever refused it, and the outcome is then
+/// <c>unknown</c> by <c>memout</c>. Its own ceiling and the host's cap refuse at the same number
+/// on every machine; a machine that could not give the memory the cap allows would refuse
+/// earlier, and the outcome does not tell the two apart. The node's budget of sessions is what
+/// keeps a session from meeting that.
+/// </para>
+/// <para>
 /// A verdict is claimed by an outcome whose status is <see cref="SmtSolveStatus.Ok"/>, and by
 /// one whose output passed its cap after the solver had answered the check: the solver said
 /// <c>sat</c>, and it is the model that did not fit
@@ -56,7 +69,11 @@ internal sealed class SmtSolveOutcome
     /// <summary>Why a check has no verdict, or why an enumeration stopped before it was complete (none when it stopped at its number of models).</summary>
     public SmtUnknownReason Reason { get; init; }
 
-    /// <summary>The solver's own word for an <c>unknown</c>, as it answered <c>(get-info :reason-unknown)</c>; empty when it was not asked.</summary>
+    /// <summary>
+    /// The solver's own word for an <c>unknown</c>, as it answered <c>(get-info :reason-unknown)</c>;
+    /// for an enumeration that ended because the solver did not take a found model's values back,
+    /// what it said to that; empty when there is neither.
+    /// </summary>
     public string ReasonText { get; init; } = "";
 
     /// <summary>The models an enumeration found; 0 for the other queries.</summary>

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Profiles;
 using OutWit.Controller.AI.Smt.Sandbox;
@@ -43,7 +44,7 @@ internal static class SmtSolver
             return refused;
 
         var sandbox = SmtSandboxHost.Get(out var unavailable);
-        return Run(plan!, envelope!, sandbox, unavailable, cancellationToken);
+        return Run(plan!, envelope!, sandbox, unavailable, cancellationToken, null, problem.Index);
     }
 
     /// <summary>
@@ -55,11 +56,12 @@ internal static class SmtSolver
     /// <param name="sandbox">The sandbox, or null when there is none.</param>
     /// <param name="unavailable">Why there is no sandbox, in fixed words; ignored when there is one.</param>
     /// <param name="cancellationToken">Ends the session at the solver's next read of its input.</param>
+    /// <param name="logger">The node's own log, for a failure of the host outside the solver; null for none.</param>
     /// <returns>The outcome.</returns>
     /// <exception cref="ArgumentNullException">There is no problem, or there are no options.</exception>
-    public static SmtSolveOutcome Solve(SmtProblemData problem, SmtOptionsData options, SmtSandbox? sandbox, string? unavailable, CancellationToken cancellationToken = default)
+    public static SmtSolveOutcome Solve(SmtProblemData problem, SmtOptionsData options, SmtSandbox? sandbox, string? unavailable, CancellationToken cancellationToken = default, ILogger? logger = null)
     {
-        return Prepare(problem, options, out var envelope, out var plan) ?? Run(plan!, envelope!, sandbox, unavailable, cancellationToken);
+        return Prepare(problem, options, out var envelope, out var plan) ?? Run(plan!, envelope!, sandbox, unavailable, cancellationToken, logger, problem.Index);
     }
 
     /// <summary>
@@ -79,7 +81,7 @@ internal static class SmtSolver
         ArgumentNullException.ThrowIfNull(envelope);
 
         var plan = SmtSolvePlan.Prepare(problem, envelope, out var refusal);
-        return plan == null ? Refused(problem.Query, refusal!) : Run(plan, envelope, sandbox, unavailable, cancellationToken);
+        return plan == null ? Refused(problem.Query, refusal!) : Run(plan, envelope, sandbox, unavailable, cancellationToken, null, problem.Index);
     }
 
     /// <summary>
@@ -116,7 +118,7 @@ internal static class SmtSolver
         return plan == null ? Refused(problem.Query, refusal!) : null;
     }
 
-    private static SmtSolveOutcome Run(SmtSolvePlan plan, SmtEnvelope envelope, SmtSandbox? sandbox, string? unavailable, CancellationToken cancellationToken)
+    private static SmtSolveOutcome Run(SmtSolvePlan plan, SmtEnvelope envelope, SmtSandbox? sandbox, string? unavailable, CancellationToken cancellationToken, ILogger? logger, int index)
     {
         if (cancellationToken.IsCancellationRequested)
             return Faulted(plan.Query, SmtSolveCodes.CANCELLED, "the session was cancelled before it started");
@@ -133,7 +135,12 @@ internal static class SmtSolver
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             // Nothing the solver did: a file of the host's own, an engine that could not make a
-            // store. The kind of failure travels; its text may name a path of the machine.
+            // store, or a fault of this controller's own code inside the conversation (which
+            // reaches here wrapped, as the inner exception). The kind of failure travels; its
+            // text may name a path of the machine, so the exception itself, with its text and
+            // its stack, goes to the node's own log and nowhere else.
+            logger?.LogError(exception, "Smt: the session of problem {Index} failed on this node outside the solver; its row says {Code}", index, SmtSolveCodes.HOST_FAULT);
+
             var inner = exception.InnerException == null ? "" : $" ({exception.InnerException.GetType().Name})";
             return Faulted(plan.Query, SmtSolveCodes.HOST_FAULT, $"the host failed outside the solver: {exception.GetType().Name}{inner}");
         }

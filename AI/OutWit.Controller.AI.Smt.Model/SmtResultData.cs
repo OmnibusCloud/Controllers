@@ -159,7 +159,11 @@ public sealed partial class SmtResultData : ModelBase
     [MemoryPackOrder(9)]
     public string Reason { get; set; } = "";
 
-    /// <summary>The solver's own word for an <c>unknown</c>, as it answered <c>(get-info :reason-unknown)</c>; empty when it was not asked.</summary>
+    /// <summary>
+    /// The solver's own word for an <c>unknown</c>, as it answered <c>(get-info :reason-unknown)</c>;
+    /// for an enumeration that ended because the solver did not take a found model's values back
+    /// (reason <c>other</c>, the models kept), what it said to that; empty when there is neither.
+    /// </summary>
     [MemoryPackOrder(10)]
     public string ReasonText { get; set; } = "";
 

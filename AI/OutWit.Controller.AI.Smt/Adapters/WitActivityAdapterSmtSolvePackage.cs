@@ -148,11 +148,14 @@ internal sealed class WitActivityAdapterSmtSolvePackage : WitActivityAdapterFunc
     /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     internal async Task<SmtResultPackageData> SolveAsync(SmtTaskPackageData package, Guid jobId, CancellationToken cancellationToken)
     {
-        var progress = SmtDeliveryProgress.Enter(jobId, package, SmtActivityProgressReporter.Create(ProcessingManager, jobId), Logger);
+        // The work folder first: a storage with no folder to give fails the package here, before
+        // the package is entered in its job's progress. Once it is entered, only the finally below
+        // takes it out again, so nothing that can throw stands between the two.
         using var work = new SmtWorkFolder(Services, WORK_LABEL);
         var received = false;
         var solved = 0;
 
+        var progress = SmtDeliveryProgress.Enter(jobId, package, SmtActivityProgressReporter.Create(ProcessingManager, jobId), Logger);
         try
         {
             SmtPackageRunner.EnsureAcceptable(package);
@@ -183,7 +186,7 @@ internal sealed class WitActivityAdapterSmtSolvePackage : WitActivityAdapterFunc
                     package.ProblemCount, degree.Degree, degree.Reason, SmtSessionBudget.Node.Open - 1);
 
                 var resultsPath = Path.Combine(work.Path, SmtPackageCodec.RESULTS_FILE_NAME);
-                written = await SmtPackageRunner.RunAsync(turn, package, path, SmtPackageRunner.Solver(sandbox!), resultsPath, () =>
+                written = await SmtPackageRunner.RunAsync(turn, package, path, SmtPackageRunner.Solver(sandbox!, Logger), resultsPath, () =>
                 {
                     Interlocked.Increment(ref solved);
                     progress.ProblemDone();

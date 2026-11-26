@@ -138,5 +138,41 @@ public sealed class SmtSessionBudgetCancelTests : SmtSessionBudgetTestBase
         AssertIdle(budget);
     }
 
+    [Test]
+    [CancelAfter(120_000)]
+    public async Task APackageThatGivesItsTurnUpWhileItsProblemsRunHandsOutNoMoreAndFailsWhenTheyEndTest()
+    {
+        // Two sessions; a package of five problems gives its turn up when its first two run (they
+        // are held until it has). The two end, the other three are never handed out, the package
+        // fails for having left, and its place goes to the next package.
+        var budget = SmtBudgetRig.Budget(2, 0);
+        var solver = new SmtScriptedSolver(_ => QUICK_MS);
+        var leaving = Package("leaving", 5);
+        var after = Package("after", 3);
+        solver.Hold(leaving.Id(0));
+        solver.Hold(leaving.Id(1));
+
+        var failure = await SmtBudgetRig.RunUncheckedAsync(budget, leaving.Reference, leaving.ProblemsPath, leaving.ResultsPath, solver, left: () =>
+        {
+            solver.Release(leaving.Id(0));
+            solver.Release(leaving.Id(1));
+        });
+        var sessions = solver.Sessions;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(failure, Is.InstanceOf<InvalidOperationException>().With.Message.EqualTo("the package left the budget before its problems ended"));
+            Assert.That(sessions.Where(session => session.TimedOut).Select(session => session.Id), Is.Empty);
+            Assert.That(sessions.Select(session => session.Id), Is.EquivalentTo(new[] { leaving.Id(0), leaving.Id(1) }), "the problems that ran ended; no other was handed out");
+            Assert.That(File.Exists(leaving.ResultsPath), Is.False, "a package that failed leaves no file of rows");
+        });
+        AssertIdle(budget);
+
+        var runs = await SolveAllAsync(budget, solver, after);
+
+        AssertOwnRows(runs[0], after);
+        AssertIdle(budget);
+    }
+
     #endregion
 }

@@ -37,6 +37,16 @@ internal static class SmtBudgetRig
         return new SmtSessionBudget(read, maxOpen > 0 ? maxOpen : SmtSessionBudget.MAX_OPEN_PACKAGES);
     }
 
+    /// <summary>A budget of a machine with given numbers whose sessions run on threads the test makes: a machine that may have no thread to give.</summary>
+    /// <param name="cores">The machine's logical cores.</param>
+    /// <param name="availableBytes">The memory it has available; 0 when it cannot say.</param>
+    /// <param name="makeThread">Makes the thread of a session, not started, or throws.</param>
+    /// <returns>The budget.</returns>
+    public static object Budget(int cores, long availableBytes, Func<Action, Thread> makeThread)
+    {
+        return new SmtSessionBudget(() => (cores, availableBytes), SmtSessionBudget.MAX_OPEN_PACKAGES, makeThread);
+    }
+
     /// <summary>
     /// Solves a package on a budget as a node does, its problems by the scripted solver: each row
     /// says <c>ok sat</c> with the script's milliseconds as its fuel, or is the node's fault
@@ -48,9 +58,10 @@ internal static class SmtBudgetRig
     /// <param name="resultsPath">The file its rows are written to.</param>
     /// <param name="solver">The scripted solver.</param>
     /// <param name="cancellationToken">The package's job's token.</param>
+    /// <param name="handedOut">Called when the package has given its problems to the budget (the budget has started every session it may start for them now), before its rows are waited for; null for nothing.</param>
     /// <returns>Its rows and its degree, or the code of its refusal, or that it was cancelled.</returns>
     public static async Task<SmtBudgetRun> SolveAsync(object budget, SmtTaskPackageData package, string problemsPath, string resultsPath,
-        SmtScriptedSolver solver, CancellationToken cancellationToken)
+        SmtScriptedSolver solver, CancellationToken cancellationToken, Action? handedOut = null)
     {
         // What is awaited here is a task as a plain task, never as a task of a controller type: its
         // awaiter would be a field of this method's state machine, a value type of the tests. The
@@ -74,6 +85,7 @@ internal static class SmtBudgetRig
                 return new SmtBudgetRun { Fault = fault };
 
             var running = RunAsync(turn, package, problemsPath, resultsPath, solver, cancellationToken);
+            handedOut?.Invoke();
             await running;
             return new SmtBudgetRun { Rows = SmtNodeRig.ReadRows(WrittenPath(running), package.ProblemCount), Degree = degree, Reason = reason };
         }
@@ -91,6 +103,47 @@ internal static class SmtBudgetRig
         }
     }
 
+    /// <summary>
+    /// Runs a package on a budget in one of the two ways a node's adapter never does, and gives
+    /// back what its run threw. The package does not ask for its degree first, so that one of
+    /// which no session fits reaches the budget itself; and, when <paramref name="left"/> is
+    /// given, it gives its turn up as soon as its problems are handed out, while they run.
+    /// </summary>
+    /// <param name="budget">The budget.</param>
+    /// <param name="package">The package's reference.</param>
+    /// <param name="problemsPath">Its file.</param>
+    /// <param name="resultsPath">The file its rows are written to.</param>
+    /// <param name="solver">The scripted solver.</param>
+    /// <param name="left">Called when the package has given its turn up with its problems handed out; null for a package that keeps its turn to the end.</param>
+    /// <returns>What the run threw; null when it ended whole.</returns>
+    public static async Task<Exception?> RunUncheckedAsync(object budget, SmtTaskPackageData package, string problemsPath, string resultsPath, SmtScriptedSolver solver, Action? left = null)
+    {
+        var entering = EnterAsync(budget, CancellationToken.None);
+        await entering;
+        var turn = ResultOf(entering);
+
+        try
+        {
+            var running = RunAsync(turn, package, problemsPath, resultsPath, solver, CancellationToken.None);
+            if (left != null)
+            {
+                ((IDisposable)turn).Dispose();
+                left();
+            }
+
+            await running;
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+        finally
+        {
+            ((IDisposable)turn).Dispose();
+        }
+    }
+
     /// <summary>What a budget counted: its sessions and packages now, the most at once, and how often it read the machine.</summary>
     /// <param name="budget">The budget.</param>
     /// <returns>The numbers.</returns>
@@ -101,11 +154,20 @@ internal static class SmtBudgetRig
             counted.Reads, counted.SessionCap, counted.CapacityBytes);
     }
 
-    /// <summary>The node's own budget, the one <c>Smt.SolvePackage</c> runs on, with its highest numbers forgotten.</summary>
+    /// <summary>Runs work on the controller's pool of worker threads, each made by the test: a machine that may have no thread to give.</summary>
+    /// <param name="count">The work items.</param>
+    /// <param name="degree">The workers at once.</param>
+    /// <param name="body">The work of one index.</param>
+    /// <param name="makeThread">Makes a worker's thread, not started, or throws.</param>
+    public static void Pool(int count, int degree, Action<int> body, Func<Action, Thread> makeThread)
+    {
+        SmtWorkerPool.Run(count, degree, body, makeThread);
+    }
+
+    /// <summary>The node's own budget, the one <c>Smt.SolvePackage</c> runs on. It is the process's: its highest numbers are of every package the process has solved so far.</summary>
     /// <returns>The budget.</returns>
     public static object Node()
     {
-        SmtSessionBudget.Node.ResetPeaks();
         return SmtSessionBudget.Node;
     }
 

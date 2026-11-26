@@ -13,7 +13,8 @@ namespace OutWit.Controller.AI.Smt;
 /// The Smt controller: SMT problems solved by a pinned solver that runs as a WebAssembly module
 /// in the controller's own wasm sandbox, under a budget that is the same on every machine. On a
 /// node it solves packages of problems (<c>Smt.SolvePackage</c>: a reference to a blob of problems
-/// in, a reference to a blob of rows out) with a pool of sessions, and measures the node on a
+/// in, a reference to a blob of rows out) on the node's one budget of sessions, which the problems
+/// of all its packages share, and measures the node on a
 /// reference set for the allocator; on a host it runs a problem set end to end (<c>SmtRun</c>: the
 /// set cut into packages, copies on different machines compared by digest, a repair round, a
 /// dispute round, every <c>sat</c> model checked by the host's evaluator, and the documents), says

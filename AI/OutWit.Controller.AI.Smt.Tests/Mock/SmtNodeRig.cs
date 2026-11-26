@@ -14,7 +14,7 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 
 /// <summary>
 /// How the tests meet the node side of the controller: a problem's row, a package of problems
-/// written and read, a package solved by the pool, the refusals of a package, the degree rule, the
+/// written and read, a package solved on a budget of sessions, the refusals of a package, the degree rule, the
 /// diagnostics, the capabilities, the benchmark. As in <see cref="SmtSolverRig"/>, the controller's
 /// types are met inside method bodies only: what a test sees are the model package's types, words,
 /// numbers and texts, so no test type brings the controller's assembly in when the tests are looked
@@ -244,11 +244,13 @@ internal static class SmtNodeRig
     }
 
     /// <summary>
-    /// Solves a checked package with the pool in the process's sandbox and reads its rows back.
+    /// Solves a checked package in the process's sandbox, alone on a budget of sessions of the
+    /// test's own, and reads its rows back. The caller waits for the package here, as no node
+    /// does: a node's adapter is asynchronous to its end.
     /// </summary>
     /// <param name="package">The reference.</param>
     /// <param name="problemsPath">The package's file.</param>
-    /// <param name="degree">The sessions at once.</param>
+    /// <param name="degree">The sessions at once, at most the most a node runs.</param>
     /// <param name="resultsPath">The file of the rows.</param>
     /// <param name="problemDone">Called after each row.</param>
     /// <param name="cancellationToken">The job's token.</param>
@@ -256,7 +258,13 @@ internal static class SmtNodeRig
     public static List<SmtResultData> RunPackage(SmtTaskPackageData package, string problemsPath, int degree, string resultsPath, Action? problemDone = null, CancellationToken cancellationToken = default)
     {
         var sandbox = SmtSandboxHost.Get(out var unavailable) ?? throw new InvalidOperationException(unavailable);
-        var written = SmtPackageRunner.Run(package, problemsPath, sandbox, degree, resultsPath, problemDone, NullLogger.Instance, cancellationToken);
+
+        // A machine of as many cores as the degree that cannot say what memory it has: the cores decide.
+        var budget = new SmtSessionBudget(() => (degree, 0));
+        using var turn = budget.EnterAsync(cancellationToken).GetAwaiter().GetResult();
+        var written = SmtPackageRunner.RunAsync(turn, package, problemsPath, SmtPackageRunner.Solver(sandbox, NullLogger.Instance), resultsPath, problemDone, NullLogger.Instance, cancellationToken)
+            .GetAwaiter().GetResult();
+
         Assert.That(written.Rows, Is.EqualTo(package.ProblemCount), "a row for every problem");
         return ReadRows(written.Path, package.ProblemCount);
     }
