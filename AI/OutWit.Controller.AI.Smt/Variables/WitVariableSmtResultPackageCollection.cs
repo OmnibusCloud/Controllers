@@ -2,6 +2,7 @@ using MemoryPack;
 using OutWit.Common.Abstract;
 using OutWit.Common.Collections;
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Settlement;
 using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Data.Collections;
 using OutWit.Engine.Interfaces;
@@ -10,6 +11,13 @@ namespace OutWit.Controller.AI.Smt.Variables;
 
 /// <summary>
 /// Collection of packages of results (references to blobs of rows): the output of a Grid.ForEach over Smt.SolvePackage.
+/// <para>
+/// It asks Grid which package each result was returned for (<see cref="OnGridAnswer"/>): a result
+/// names the ticket of the package it answers, and that is the node's word, while Grid knows which
+/// task, and so which package, a value came back for. The host remembers the pair for the result
+/// object (<see cref="SmtResultBindings"/>), never in the collection's items: nothing of it is
+/// copied by <see cref="Clone"/> or travels with the collection.
+/// </para>
 /// </summary>
 [Variable("SmtResultPackageCollection")]
 [MemoryPackable]
@@ -31,6 +39,25 @@ public sealed partial class WitVariableSmtResultPackageCollection : WitCollectio
     public WitVariableSmtResultPackageCollection(string name, IReadOnlyList<SmtResultPackageData?> value)
         : base(name, value)
     {
+    }
+
+    #endregion
+
+    #region Grid
+
+    /// <summary>
+    /// What Grid (1.4.0 and later) tells a return collection of a <c>Grid.ForEach</c>, once for
+    /// every value it keeps and before the value joins the results: the item of the call's
+    /// collection the task was built from, and the value the node returned for it, both the very
+    /// objects. For a package of problems and a result package the host remembers that the result
+    /// was returned for that package; anything else is not remembered. It never throws (a throw
+    /// would leave the result unbound) and may be called from several threads at once.
+    /// </summary>
+    /// <param name="item">The item the task was built from; null or of another type for a call over something else.</param>
+    /// <param name="value">The value the node returned for the task.</param>
+    public void OnGridAnswer(object? item, object? value)
+    {
+        SmtResultBindings.Bind(item, value);
     }
 
     #endregion

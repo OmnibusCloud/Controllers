@@ -95,8 +95,18 @@ internal sealed class SmtRound
     /// </summary>
     public HashSet<string> Surplus { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>How many result references came back under each ticket of the round, taken or refused.</summary>
+    /// <summary>
+    /// How many result references came back for each package of the round, taken or refused: a
+    /// bound result for the package whose task it was returned for, whatever it names, an unbound
+    /// one under the ticket it names.
+    /// </summary>
     public Dictionary<string, int> Returned { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The result references that came back bound: the platform told the host which package's task each was returned for.</summary>
+    public int BoundResults { get; set; }
+
+    /// <summary>The result references that came back unbound: the platform told the host nothing of them.</summary>
+    public int UnboundResults { get; set; }
 
     /// <summary>The result packages refused, every reason together.</summary>
     public int RejectedTotal => Rejected.Values.Sum();

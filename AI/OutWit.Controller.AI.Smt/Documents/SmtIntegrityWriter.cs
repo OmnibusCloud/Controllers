@@ -9,8 +9,9 @@ namespace OutWit.Controller.AI.Smt.Documents;
 /// did with what the nodes returned, in counts. The copies made, how they compared, the disputes
 /// and how they ended, the answers a lie was found in, the problems on which the evaluator and the
 /// solver disagree (loudly: each by its index), the repairs and why, the problems left without a
-/// result, the result packages refused and the packages nodes could not work on, and what every
-/// fan-out was asked for and what came back. It names no machine and no package.
+/// result, the result packages refused and the packages nodes could not work on, what every
+/// fan-out was asked for and what came back, and whether the platform told the host which package
+/// each result was returned for. It names no machine and no package.
 /// </summary>
 internal static class SmtIntegrityWriter
 {
@@ -63,6 +64,9 @@ internal static class SmtIntegrityWriter
         writer.WriteNumber("node_faults", facts.Faults.Values.Sum());
         WriteCounts(writer, "node_faults_by_code", SmtNodeFaults.ALL, facts.Faults);
         SmtSampling.Write(writer, facts.SamplingRate, facts.Sampling, facts.UnansweredPackages);
+        writer.WriteString("binding", facts.Binding);
+        writer.WriteNumber("results_bound", facts.BoundResults);
+        writer.WriteNumber("results_unbound", facts.UnboundResults);
         writer.WriteEndObject();
 
         // Loudly, by index: the problems on which the machines agree and the evaluator does not.

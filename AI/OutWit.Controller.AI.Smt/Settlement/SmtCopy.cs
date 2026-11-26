@@ -35,6 +35,14 @@ internal sealed class SmtCopy
     /// <summary>The ticket of the package the row came in.</summary>
     public required string Ticket { get; init; }
 
+    /// <summary>
+    /// Whether the row came in a result the platform told the host was returned for a task of its
+    /// package (<see cref="SmtResultBindings"/>). Bound answers of one package in one fan-out came
+    /// back for different tasks of it, which Grid keeps on different machines; unbound answers may
+    /// all be one machine's.
+    /// </summary>
+    public bool Bound { get; init; }
+
     /// <summary>Where the whole row lies in the spool, or -1 when it was not kept.</summary>
     public long SpoolOffset { get; init; } = -1;
 

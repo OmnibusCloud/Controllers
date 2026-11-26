@@ -40,7 +40,7 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 | Platforms of the nodes | Windows x64, Linux x64, macOS arm64 |
 | Machines of the nodes | 8 GB of memory at least (7,680 MiB as a node reports it: a machine sold as 8 GB reports a little less than 8,192 MiB): the planner sends no package to a smaller one |
 | Budget of a problem | the solver's resource limit of a check (150,000,000 by default) and the hard cap as fuel (60 s of a reference machine by default, at 5,000,000,000 units a second): counts, the same on every node |
-| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a problem whose package lost one of its two copies, or that has no answer, goes out again to two machines; a dispute on three more |
+| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a problem whose package lost one of its two copies, or that has no answer, goes out again to two machines; a dispute on three more. Two answers are two machines only when the platform says they came back for two tasks of one fan-out (Grid 1.4.0 and later) |
 | Checks | every `sat` model is evaluated against the problem on the server, by code that shares nothing with the solver |
 | Documents | results (JSON lines), report, provenance, integrity (JSON), each with a schema |
 | Machines | no document names one: a row says how many machines answered and whether they agreed |
@@ -112,14 +112,15 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
 | `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
 | `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
-| `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least), `dispute`, `agreement` |
+| `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least: two answers the platform said came back for two tasks of the problem's package), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
 | `tags` | passed through |
 
 ### The report ([`smt-report.schema.json`](smt-report.schema.json))
 
 What the run ran with in short (profile, module SHA-256, controller version, sampling rate and
-whether it was met, the options as numbers); the set as it was read (rows, taken, refused by code,
+whether it was met, whether the platform said which package each result came back for
+(`binding`), the options as numbers); the set as it was read (rows, taken, refused by code,
 by logic, by query); the rows by status; the verdicts; the unknowns by reason; the agreement with
 the expected verdicts; the evaluator's classes, by logic, and the partial ones by reason; the
 copies (problems answered by two machines or more, how many agreed, the disputes and how they
@@ -136,8 +137,9 @@ compared, the problems that rest on one machine (and of them the `unsat` ones), 
 cause and by outcome, the answers a lie was found in and the problems they are of, the models the
 evaluator called failed, **the problems on which the machines agree and the evaluator does not,
 each by its index**, the repairs and why, the problems left without a result and why, the result
-packages refused by reason, the packages nodes said they could not work on by code, and what every
-fan-out was asked for and what came back.
+packages refused by reason, the packages nodes said they could not work on by code, what every
+fan-out was asked for and what came back, and how many results came back bound and unbound, with
+the run's `binding` (`bound`, `unbound`, `mixed`, or `none` when no result came back).
 
 ### The provenance ([`smt-provenance.schema.json`](smt-provenance.schema.json))
 
@@ -176,7 +178,10 @@ What holds:
   has them (a verdict only where a session claims one, a `sat` with its model, the code of its
   status and no other word), its numbers within the envelope of the run's options (fuel, memory,
   checks), its texts within what a session writes, and a digest of its own; anything else fails
-  its package and is counted. A package a node could not work on, and a problem whose session a
+  its package and is counted. A result the platform says came back for a task of another package
+  than the one its ticket names (a node that answered one of its packages twice, in place of
+  another) is refused (`rejected.other_package`), and the package it came back for goes out again
+  as a package without an answer. A package a node could not work on, and a problem whose session a
   node could not end, go out once more, to two machines.
 - **The sampling asked for is restored.** A problem of a package asked for twice that came back
   with one answer (the other copy refused by its node, refused by the server, or a fault of the
@@ -198,17 +203,23 @@ What it does not claim:
   quantified term, the reasons above) is `partial` with that reason, whatever its model is: the
   value is shown as the solver printed it and rests on the copies.
 - **Duplicate models of an enumeration are not looked for.** The count is the solver's.
-- **Copies on different machines are the platform's.** The server sees results, not machines:
-  counting answers as machines rests on Grid keeping one value for each return variable a node's
-  tasks asked for (Grid 1.3.0 and later), and Grid keeps the copies of one fan-out apart and
-  guarantees nothing across fan-outs. So two answers count as two machines only when they come
-  from one fan-out: an answer of the first round and an answer of the repair round with the same
-  digest are `one_copy`.
+- **Copies on different machines are the platform's.** The server sees results, not machines,
+  and a result's ticket is the node's word. `copies` rests on the platform telling the server
+  which package each result came back for: Grid 1.4.0 and later tell the return collection of
+  every fan-out the package of each task, and the server refuses a result returned for another
+  package than the one it names. Two answers count as two machines only when both came back bound
+  in one fan-out, for two tasks of their package, which Grid keeps on different machines; Grid
+  guarantees nothing across fan-outs, so an answer of the first round and an answer of the repair
+  round with the same digest are `one_copy`. On an older Grid no answer is ever counted as a
+  second machine: copies are still compared by digest, nothing is settled `copies`, and the
+  documents say `binding: unbound`. A machine is what the platform knows as a node: two nodes of
+  one owner are two machines to it.
 - **A package asked for twice is known by its results.** Which packages a rate falls on is the
   platform's choice and the server never learns it: it knows a package was asked for twice when
-  two results came back under it, whatever they say, or when the rate asks for every package. A
-  package asked for twice of which at most one result came back cannot be found, is not sent
-  again, and leaves the sampling `short`.
+  two results came back for it, whatever they say (a bound result for the package whose task it
+  came back for, an unbound one under the ticket it names), or when the rate asks for every
+  package. A package asked for twice of which at most one result came back cannot be found, is
+  not sent again, and leaves the sampling `short`.
 
 ## 7. Limits
 

@@ -7,6 +7,7 @@
     "sampling_rate": 1,
     "sampling": "as_asked",
     "unanswered_packages": 0,
+    "binding": "bound",
     "options": { "profile": "z3-5.4.1", "query": "check", "max_models": 2, "seed": 0, "rlimit": 150000000, "hard_cap_s": 60, "fuel": 300000000000, "memory_mb": 1024, "sampling_rate": 1 }
   },
   "problem_set": {

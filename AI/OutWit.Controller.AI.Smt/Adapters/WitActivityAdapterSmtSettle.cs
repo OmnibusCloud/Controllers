@@ -73,9 +73,9 @@ internal sealed class WitActivityAdapterSmtSettle : WitActivityAdapterFunction<W
         try
         {
             Logger.LogInformation(
-                "Smt.Settle: {Problems} problem(s); {Copies} answer(s) taken, {Disputes} dispute(s) ({Resolved} resolved), {Lies} lie(s) found, {Disagreements} evaluator/solver disagreement(s), {Repairs} repair(s), {NoResult} without a result; {Rejected} result package(s) refused; sampling {Sampling}",
+                "Smt.Settle: {Problems} problem(s); {Copies} answer(s) taken, {Disputes} dispute(s) ({Resolved} resolved), {Lies} lie(s) found, {Disagreements} evaluator/solver disagreement(s), {Repairs} repair(s), {NoResult} without a result; {Rejected} result package(s) refused; sampling {Sampling}; binding {Binding}",
                 facts.Problems, facts.CopiesMade, facts.Disputes.Count, facts.Disputes.Count(dispute => dispute.Resolved), facts.Lies, facts.EvaluatorDisagreements.Count, facts.Repairs,
-                facts.NoResult, facts.Rejected.Values.Sum(), facts.Sampling);
+                facts.NoResult, facts.Rejected.Values.Sum(), facts.Sampling, facts.Binding);
 
             if (facts.EvaluatorDisagreements.Count > 0)
             {

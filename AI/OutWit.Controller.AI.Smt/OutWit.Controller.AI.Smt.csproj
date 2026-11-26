@@ -12,9 +12,14 @@
   </PropertyGroup>
 
   <!-- The scripts that run the controller's activities take blobs and collections of the
-       Variables controller. -->
+       Variables controller, and fan out through Grid. Grid 1.4.0 and later tell the return
+       collection of a fan-out which package each result was returned for, which is what lets the
+       host count two answers as two machines. Grid is host-only, so it is declared here for the
+       manifest and NOT as a [WitPluginDependency] of the module: that attribute is enforced on
+       the nodes too, where Grid is not installed. -->
   <ItemGroup>
     <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Grid" MinimumVersion="1.4.0" />
   </ItemGroup>
 
   <ItemGroup>

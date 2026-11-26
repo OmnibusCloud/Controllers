@@ -128,7 +128,7 @@ internal static class SmtRunSettlement
             CountRounds(facts, main, repaired, settled, rate, sampled.Count);
 
             using (var stream = Create(sections[SmtLedger.REPORT]))
-                SmtReportWriter.Write(stream, provenance, set, report, facts.Sampling, facts.UnansweredPackages);
+                SmtReportWriter.Write(stream, provenance, set, report, facts.Sampling, facts.UnansweredPackages, facts.Binding);
 
             using (var stream = Create(sections[SmtLedger.PROVENANCE]))
                 SmtProvenanceWriter.Write(stream, provenance, set.Rows);
@@ -276,6 +276,9 @@ internal static class SmtRunSettlement
 
             foreach (var (code, count) in round.Faults)
                 facts.Faults[code] = facts.Faults.GetValueOrDefault(code) + count;
+
+            facts.BoundResults += round.BoundResults;
+            facts.UnboundResults += round.UnboundResults;
         }
 
         // What each fan-out was asked for and what came back, in packages. The repair round asks
