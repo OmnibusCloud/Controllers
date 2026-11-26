@@ -257,12 +257,12 @@ What it does not claim:
   package of the controller's test sets and kits (one of the long-tail kit's, eight models of up
   to 15.9 million characters) costs 192,176,798 steps, and 272,433,418 when that kit is cut into
   packages of 256 problems: the budget is fifteen and eleven times that. A model is also read
-  under limits of its own before anything is evaluated (32 Mi characters, 5,242,880 tokens,
-  nesting 131,072, the evaluator's ceilings of a number, a literal and a string, a name of at
-  most what a problem can hold): a model past one is `partial` (`unreadable_model`, or
-  `unreadable_values` for the values). The tokens are half as many again as the largest model of
-  the sets and kits has (3,376,297 in 15.9 million characters); a model of more, near a session's
-  output cap, is not checked.
+  under limits of its own before anything is evaluated (32 Mi characters, 8,388,608 tokens and
+  the nesting they allow, the evaluator's ceilings of a number, a literal and a string, a name of
+  at most what a problem can hold): a model past one is `partial` (`unreadable_model`, or
+  `unreadable_values` for the values). The tokens are one for every two characters a session may
+  print: the densest models the pinned solver prints (the tables of functions of a few
+  arguments) have 0.46 a character, so every model a session can print is read.
 - **A value the evaluator does not compute is not vouched for.** A row that asks for the value of
   a term the evaluator leaves open (a division by zero, a selector of another constructor, a
   quantified term, the reasons above) is `partial` with that reason, whatever its model is: the
@@ -302,7 +302,7 @@ What it does not claim:
 | A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
 | A row a node returns | its models and values within the session's output (16 Mi characters together); 48 MiB and 64 KiB as bytes in its package (`packages.max_result_frame_bytes` of the capabilities) |
 | What a lab sees of a row's models | 64 KB |
-| A model the server reads | 32 Mi characters, 5,242,880 tokens, nesting 131,072, 325,059 digits of a number, a literal of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters; past one it is `unreadable_model` |
+| A model the server reads | 32 Mi characters, 8,388,608 tokens (a token every two characters a session may print) and the nesting they allow, 325,059 digits of a number, a literal of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters; past one it is `unreadable_model` |
 | What the server's evaluator spends | 20,000,000 steps a model (the evaluator's budget), 3,000,000,000 steps the models of one result package together (a model's text paying four steps a character, its check's setting up 10,000); past it a package's rows are `budget_package` |
 | What the server keeps of one run while it settles it | 128 GiB of the nodes' rows, 2 GiB of the full models of the rows whose models were cut; a run past either is not settled, and the job fails with `smt_rows_bound` or `smt_models_bound` |
 | Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |

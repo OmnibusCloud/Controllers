@@ -30,10 +30,10 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// </para>
 /// <para>
 /// <b>What a check may cost.</b> A model's text is read under limits of the reader's own
-/// (<see cref="LIMITS"/>): its nesting, numbers, literals and strings at what the evaluator could
-/// use at the most, its names at what a problem holds, its tokens above the largest model the
-/// controller's sets and kits hold. A text past one is no model the host checks, and is
-/// unreadable before it is held. A model is checked
+/// (<see cref="LIMITS"/>): its numbers, literals and strings at what the evaluator could use at
+/// the most, its names at what a problem holds, its tokens (and so its nesting) at what any model
+/// a session may print can have. A text past one is no model a session prints, and is unreadable
+/// before it is held. A model is checked
 /// under the evaluator's budget, and the models of one result package under the package's
 /// (<see cref="SmtPackageBudget"/>): a row whose package has no steps left is not checked further
 /// and is partial (<see cref="SmtRunWords.BUDGET_PACKAGE"/>).
@@ -55,12 +55,25 @@ internal sealed class SmtHostEvaluator
 
     /// <summary>
     /// The most tokens of a model or of an answer of values the host reads, every atom and every
-    /// parenthesis one: 5 Mi. The largest model of the controller's sets and kits, a solver's
-    /// definitions of 15.9 million characters that nearly fill a session's output, has 3,376,297;
-    /// the limit is a half above it, and a text of one-letter atoms that fills a session's output
-    /// is refused five eighths of the way into it.
+    /// parenthesis one: a token for every two characters a session may print (8 Mi). The solver
+    /// writes a blank between two atoms and a line, indented, for each definition and each entry of
+    /// a function's table, so what it prints has fewer tokens than characters by half. Measured on
+    /// the pinned solver, the densest shapes are the tables of functions of a few arguments: 0.46
+    /// a character for a function of four integers, 0.43 for two, 0.36 for one; constants of the
+    /// integers, the Booleans and the bit-vectors 0.21 to 0.30, the largest model of the
+    /// controller's kits 0.21. A model of the densest of them that fills a session's output has
+    /// 7.7 M tokens. A text of parentheses alone (one token a character) is refused halfway.
     /// </summary>
-    public const int MAX_MODEL_TOKENS = 5 * 1024 * 1024;
+    public const int MAX_MODEL_TOKENS = SmtProfile.OUTPUT_LIMIT_BYTES / 2;
+
+    /// <summary>
+    /// The deepest nesting of a model the host reads: as deep as its tokens let it nest, a list
+    /// being two of them. A solver prints the table of a function as a chain of conditionals, each
+    /// in a branch of the one before, as deep as the table is long, and the evaluator walks such a
+    /// chain without nesting: the reader does not cut a model shorter than its tokens do. A term
+    /// that really nests deeper than the evaluator's ceiling ends its check there.
+    /// </summary>
+    public const int MAX_MODEL_DEPTH = MAX_MODEL_TOKENS / 2;
 
     /// <summary>
     /// The most digits of a numeral or a decimal of a model: a numeral of more is wider than the
@@ -70,18 +83,15 @@ internal sealed class SmtHostEvaluator
     public const int MAX_MODEL_NUMERAL_DIGITS = SmtEvaluationBudget.DEFAULT_INTEGER_BITS * 31 / 100 + 1;
 
     /// <summary>
-    /// How a model is read: within its characters, its tokens, the evaluator's highest nesting
-    /// ceiling (the deepest model of the sets and kits nests 83 lists deep; a term nested deeper
-    /// ends a check at that ceiling, and a chain of definitions' conditionals nested deeper, which
-    /// the evaluator would walk without nesting, is refused all the same), the evaluator's ceilings
-    /// of a number, a bit-vector and a string, and names no longer than the longest a problem can
-    /// hold.
+    /// How a model is read: within its characters, its tokens and the nesting they allow, the
+    /// evaluator's ceilings of a number, a bit-vector and a string, and names no longer than the
+    /// longest a problem can hold.
     /// </summary>
     public static readonly SmtReaderLimits LIMITS = new()
     {
         MaxCharacters = MAX_MODEL_CHARACTERS,
         MaxTokens = MAX_MODEL_TOKENS,
-        MaxDepth = SmtEvaluationBudget.DEPTH_CEILING,
+        MaxDepth = MAX_MODEL_DEPTH,
         MaxNumeralDigits = MAX_MODEL_NUMERAL_DIGITS,
         MaxLiteralBits = SmtEvaluationBudget.DEFAULT_BIT_VECTOR_BITS,
         MaxStringCharacters = SmtEvaluationBudget.DEFAULT_STRING_CHARACTERS,

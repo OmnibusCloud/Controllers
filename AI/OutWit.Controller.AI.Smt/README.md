@@ -402,15 +402,23 @@ Nothing is returned and nothing is stored.
   verdict; a row's class is the worst of its models. Whatever checking one row throws is that
   row's `partial` class (`evaluator_error`), and the settlement goes on.
 - What a check may cost the host is bounded twice. A model is read under limits of the reader's
-  own (32 Mi characters, 5,242,880 tokens, nesting 131,072, 325,059 digits of a number, a literal
-  of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters): the
-  nesting, the digits, the bits and the characters of a string are the evaluator's highest
-  ceilings, a name is no longer than a problem may hold, and the tokens are half as many again as
-  the largest model of the controller's sets and kits has (3,376,297, a solver's definitions of
-  15.9 million characters). A text past one is `unreadable_model` (or `unreadable_values`) before
-  it is held. And the models of one result package have one budget of the evaluator's steps
-  together (`SmtPackageBudget`, 3,000,000,000 steps, about a minute of a desktop machine): a model
-  pays its steps, four steps a character of its text, and 10,000 steps for its check's setting
+  own (32 Mi characters, 8,388,608 tokens and the nesting they allow, 325,059 digits of a number,
+  a literal of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters):
+  the digits, the bits and the characters of a string are the evaluator's highest ceilings, a
+  name is no longer than a problem may hold, and the tokens are one for every two characters a
+  session may print. The solver writes a blank between two atoms and a line for each definition
+  and each entry of a table: the densest models the pinned solver prints, the tables of functions
+  of a few arguments, have 0.46 tokens a character (constants 0.21 to 0.30, the largest model of
+  the kits 0.21), 7.7 million tokens at a session's whole output, which is read (2.1 s and 576 MiB
+  here). A table nests as deep as it is long and the evaluator walks it without nesting, so the
+  reader limits no nesting but what the tokens allow. A text past a limit is `unreadable_model`
+  (or `unreadable_values`) before it is held: 16 MiB of parentheses alone, one token a character,
+  is refused halfway (0.8 s, 384 MiB). 16 MB of one-letter atoms is under the limit and is read,
+  then is no model (1.6 s, 677 MiB); its package pays 64,010,008 steps for it, so a package's
+  budget pays for 46 such texts, a little over a minute here. And the models of one result
+  package have one budget of the evaluator's steps together (`SmtPackageBudget`,
+  3,000,000,000 steps, about a minute of a desktop machine): a model pays its steps,
+  four steps a character of its text, and 10,000 steps for its check's setting
   up; a package spends only on its own rows, in their order, and the model that takes it past
   its budget is the last one checked. Its later rows are `partial` (`budget_package`), their
   answers rest on the copies. `Smt.Disputes` checks every `sat` answer of its rounds as
