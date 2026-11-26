@@ -130,8 +130,8 @@ public static class SmtRefusalCodes
 
     #region Properties
 
-    /// <summary>Every code: a set no caller can change.</summary>
-    public static FrozenSet<string> All => CODES;
+    /// <summary>Every code: a frozen set, which no caller can change, a cast included.</summary>
+    public static IReadOnlyCollection<string> All => CODES;
 
     #endregion
 }

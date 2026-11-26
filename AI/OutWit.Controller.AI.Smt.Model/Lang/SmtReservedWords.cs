@@ -63,11 +63,11 @@ public static class SmtReservedWords
 
     #region Properties
 
-    /// <summary>The general reserved words: a set no caller can change.</summary>
-    public static FrozenSet<string> General => GENERAL;
+    /// <summary>The general reserved words: a frozen set, which no caller can change, a cast included.</summary>
+    public static IReadOnlyCollection<string> General => GENERAL;
 
-    /// <summary>The command names: a set no caller can change.</summary>
-    public static FrozenSet<string> Commands => COMMANDS;
+    /// <summary>The command names: a frozen set, which no caller can change, a cast included.</summary>
+    public static IReadOnlyCollection<string> Commands => COMMANDS;
 
     #endregion
 }
