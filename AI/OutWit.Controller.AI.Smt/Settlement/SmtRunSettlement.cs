@@ -3,6 +3,7 @@ using OutWit.Controller.AI.Smt.Documents;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Model.Problems;
 using OutWit.Controller.AI.Smt.Planning;
+using OutWit.Controller.AI.Smt.Solver;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Smt.Settlement;
@@ -23,6 +24,20 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 internal static class SmtRunSettlement
 {
     #region Constants
+
+    /// <summary>
+    /// Every word of a problem left without a result (its row's code, and the integrity
+    /// document's <c>no_result_by_reason</c>), as <see cref="ReasonIn"/> gives them: a node's
+    /// refusal of the problem, the kind of a fault of the node its row names, a node's fault code
+    /// of its package, the reason its package's result was refused, or no answer at all.
+    /// </summary>
+    public static readonly IReadOnlyList<string> NO_RESULT_REASONS =
+    [
+        .. new[] { SmtRunWords.NODE_REFUSED }.Concat(SmtSolveCodes.FAULTS).Concat(SmtNodeFaults.ALL).Concat(SmtRoundIntake.REASONS).Append(SmtRunWords.NO_ANSWER).Distinct(StringComparer.Ordinal)
+    ];
+
+    /// <summary>Every word of a repair (the integrity document's <c>repairs_by_reason</c>): those of a problem without an answer, and <see cref="SmtRulings.COPIES_SHORT"/>.</summary>
+    public static readonly IReadOnlyList<string> REPAIR_REASONS = [.. NO_RESULT_REASONS, SmtRulings.COPIES_SHORT];
 
     private const string RESULTS_EXTENSION = ".results";
     private const string REPORT_EXTENSION = ".report";

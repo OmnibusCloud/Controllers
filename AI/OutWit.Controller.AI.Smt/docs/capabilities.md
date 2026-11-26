@@ -53,7 +53,7 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 |---|---|---|
 | `SmtRun` | `Blob:problems`, `SmtOptions:opts` | the blobs `results`, `report`, `provenance`, `integrity` |
 | `SmtPreflight` | `Blob:problems`, `SmtOptions:opts` | `result`: an `SmtPreflight`; nothing is sent to a node |
-| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the least memory of a node's machine, the pool as totals) |
+| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the words of the documents of a run, the least memory of a node's machine, the pool as totals) |
 
 The problem set and every document travel as blobs; the job's variables carry references and a
 few numbers.
@@ -103,6 +103,16 @@ datatype over it) is taken like any other, and its enumeration ends at the first
 holds one: an answer with the models it found, `complete` false, for the reason `other`.
 
 ## 5. What comes back
+
+Every word the documents below say is listed in the capabilities document, from the lists the
+controller writes them with: under `results` the words of a row (the statuses; the codes of a
+refused row, of a crash, of a problem without a result and of a dispute that stands; the
+verdicts, the reasons, the proofs, the expected verdicts and the agreement with them, the
+evaluator's classes and reasons, how an answer was settled, the codes of a package a node could
+not work on), under `run` those of the report and the integrity document (the sampling, the
+binding, the rounds, the reasons of a repair, why a result was refused, the causes and the
+outcomes of a dispute, the budgets of the long tail). A legend or a filter built from them meets
+no word it does not list; the empty word is the documents' own for "none" where a schema allows it.
 
 ### The results ([`smt-results.schema.json`](smt-results.schema.json))
 

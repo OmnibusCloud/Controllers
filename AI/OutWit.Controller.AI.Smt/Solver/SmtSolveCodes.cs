@@ -45,5 +45,14 @@ internal static class SmtSolveCodes
     /// <summary>Node fault: the host failed outside the solver (a file it could not use).</summary>
     public const string HOST_FAULT = "host_fault";
 
+    /// <summary>Every refusal of the controller's own, beside the refusal codes of the model package.</summary>
+    public static readonly IReadOnlyList<string> REFUSALS = [HASH_MISMATCH, PROFILE_UNKNOWN, OPTIONS_INVALID];
+
+    /// <summary>Every kind of a crash of the solver, in the order the documents list them.</summary>
+    public static readonly IReadOnlyList<string> CRASHES = [TRAP, EXIT, ENGINE_ERROR, UNREADABLE_ANSWER];
+
+    /// <summary>Every kind of a fault of the node, in the order the documents list them.</summary>
+    public static readonly IReadOnlyList<string> FAULTS = [SANDBOX_UNAVAILABLE, BACKSTOP, CANCELLED, NOT_INSTANTIATED, HOST_FAULT];
+
     #endregion
 }

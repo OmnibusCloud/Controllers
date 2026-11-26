@@ -22,11 +22,32 @@
   },
   "problem_set": { "max_line_bytes": 16777216, "max_rows": 1000000, "max_id_characters": 64, "max_values": 256, "max_project": 256, "max_tags_characters": 256 },
   "results": {
-    "statuses": ["ok", "refused", "input_error", "output_exceeded", "engine_crash", "node_fault"],
+    "statuses": ["ok", "refused", "input_error", "output_exceeded", "engine_crash", "no_result", "disputed"],
+    "codes": {
+      "refused": ["command_not_allowed", "syntax_error"],
+      "engine_crash": ["trap", "exit", "engine_error", "unreadable_answer"],
+      "no_result": ["node_refused", "backstop", "version_mismatch", "content", "no_answer"],
+      "disputed": ["resolved", "no_majority", "too_few_copies", "surplus_copies"]
+    },
     "verdicts": ["sat", "unsat", "unknown", "none"],
     "reasons": ["rlimit", "fuel", "memout", "incomplete", "other", "none"],
     "proofs": ["proved", "counterexample", "none"],
+    "expected": ["sat", "unsat", "none"],
+    "expected_agreements": ["agree", "disagree", "n/a"],
+    "validations": ["validated", "partial", "failed", "none"],
+    "validation_reasons": ["assertion_false", "value_mismatch", "quantifier", "output_exceeded"],
+    "settled_by": ["one_copy", "copies", "dispute", "agreement"],
     "node_faults": ["version_mismatch", "package_invalid", "ticket_invalid"]
+  },
+  "run": {
+    "sampling": ["not_stated", "none", "as_asked", "short"],
+    "bindings": ["bound", "unbound", "mixed", "none"],
+    "rounds": ["main", "repair", "dispute"],
+    "repair_reasons": ["node_refused", "backstop", "version_mismatch", "content", "no_answer", "copies_short"],
+    "rejected": ["unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package"],
+    "dispute_causes": ["digests_differ", "model_failed", "surplus"],
+    "dispute_outcomes": ["resolved", "no_majority", "too_few_copies", "surplus_copies"],
+    "stopped_by": ["rlimit", "fuel", "memout"]
   },
   "packages": { "max_problems": 256, "max_bytes": 269484032, "max_problem_frame_bytes": 134217728, "max_result_frame_bytes": 50397184 },
   "node": { "min_ram_mb": 7680, "max_degree": 16, "ram_headroom": 0.75, "session_margin_bytes": 201326592, "session_bytes": 2885681152, "priority": "below_normal" },

@@ -264,10 +264,13 @@ its version and profile, the module's pin and whether the process has it and has
 the platform, and the degree a package would get, with what decided it. Asking compiles nothing.
 `Smt.Capabilities` writes what a lab can know before a run as a JSON document
 ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)): the profile, the
-queries, the defaults and ceilings of the options and of a problem, the words of a row and the
-codes of a node's refusal, the size of a package, the degree rule and the least memory of a
-machine, the benchmark's unit, the platforms and the pool as totals. Nothing in either names a
-machine.
+queries, the defaults and ceilings of the options and of a problem, the words of every document
+of a run (each list the one the documents are written with: a row's statuses, codes, verdicts,
+reasons, classes and how it was settled, the codes of a node's refusal, and the words of the
+report and the integrity document), the size of a package, the degree rule and the least memory
+of a machine, the benchmark's unit, the platforms and the pool as totals. A test holds every
+enum of the documents' schemas, and every table of them keyed by words, to a list of it. Nothing
+in either names a machine.
 
 The benchmark of `Smt.SolvePackage` gives the allocator a rate: thirty small problems written for
 it (every query; linear integers and reals, bit-vectors, uninterpreted functions, arrays,

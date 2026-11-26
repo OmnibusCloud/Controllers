@@ -1,5 +1,9 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Model.Eval;
+using OutWit.Controller.AI.Smt.Model.Lang;
+using OutWit.Controller.AI.Smt.Settlement;
+using OutWit.Controller.AI.Smt.Tests.Docs;
 using OutWit.Controller.AI.Smt.Tests.Mock;
 using OutWit.Controller.AI.Smt.Tests.Run;
 
@@ -81,6 +85,75 @@ public sealed class SmtCapabilitiesWordsTests
             Assert.That(statuses, Is.EquivalentTo(Enum(RESULTS, "/status")), "a row of the results says these statuses and no other");
             Assert.That(statuses, Does.Not.Contain(SmtResultWords.NODE_FAULT), "a node's fault is never a row of the results");
             Assert.That(statuses, Does.Contain(SmtRunWords.NO_RESULT).And.Contain(SmtRunWords.DISPUTED), "the server's own statuses are");
+        });
+    }
+
+    #endregion
+
+    #region Code Tests
+
+    [Test]
+    public void EveryListIsTheCodesOwnTest()
+    {
+        var capabilities = Capabilities();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Words(capabilities, "/queries"), Is.EqualTo(new[] { "check", "enumerate", "prove" }));
+            Assert.That(Words(capabilities, "/results/statuses"), Is.EqualTo(SmtRunWords.STATUSES));
+            Assert.That(Words(capabilities, "/results/codes/refused"), Is.EquivalentTo(SmtRefusalCodes.All));
+            Assert.That(Words(capabilities, "/results/codes/refused"), Is.Ordered.Using((IComparer<string>)StringComparer.Ordinal), "in an order of their own, whatever the set's");
+            Assert.That(Words(capabilities, "/results/codes/engine_crash"), Is.EqualTo(new[] { "trap", "exit", "engine_error", "unreadable_answer" }));
+            Assert.That(Words(capabilities, "/results/codes/no_result"), Is.EqualTo(SmtRunSettlement.NO_RESULT_REASONS));
+            Assert.That(Words(capabilities, "/results/codes/disputed"), Is.EqualTo(SmtRunWords.DISPUTE_OUTCOMES));
+            Assert.That(Words(capabilities, "/results/verdicts"), Is.EqualTo(SmtResultWords.VERDICTS));
+            Assert.That(Words(capabilities, "/results/reasons"), Is.EqualTo(SmtResultWords.REASONS));
+            Assert.That(Words(capabilities, "/results/proofs"), Is.EqualTo(SmtResultWords.PROOFS));
+            Assert.That(Words(capabilities, "/results/expected"), Is.EqualTo(new[] { "sat", "unsat", "none" }));
+            Assert.That(Words(capabilities, "/results/expected_agreements"), Is.EqualTo(SmtRunWords.EXPECTATIONS));
+            Assert.That(Words(capabilities, "/results/validations"), Is.EqualTo(SmtRunWords.VALIDATIONS));
+            Assert.That(Words(capabilities, "/results/validation_reasons"), Is.EqualTo(SmtValidationReasons.All.Append(SmtRunWords.OUTPUT_EXCEEDED)));
+            Assert.That(Words(capabilities, "/results/settled_by"), Is.EqualTo(SmtRunWords.SETTLED_BY));
+            Assert.That(Words(capabilities, "/results/node_faults"), Is.EqualTo(SmtNodeFaults.ALL));
+            Assert.That(Words(capabilities, "/run/sampling"), Is.EqualTo(new[] { "not_stated", "none", "as_asked", "short" }));
+            Assert.That(Words(capabilities, "/run/bindings"), Is.EqualTo(SmtRunWords.BINDINGS));
+            Assert.That(Words(capabilities, "/run/rounds"), Is.EqualTo(new[] { "main", "repair", "dispute" }));
+            Assert.That(Words(capabilities, "/run/repair_reasons"), Is.EqualTo(SmtRunSettlement.NO_RESULT_REASONS.Append("copies_short")));
+            Assert.That(Words(capabilities, "/run/rejected"), Is.EqualTo(new[] { "unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package" }));
+            Assert.That(Words(capabilities, "/run/dispute_causes"), Is.EqualTo(SmtRunWords.DISPUTE_CAUSES));
+            Assert.That(Words(capabilities, "/run/dispute_outcomes"), Is.EqualTo(SmtRunWords.DISPUTE_OUTCOMES));
+            Assert.That(Words(capabilities, "/run/stopped_by"), Is.EqualTo(new[] { "rlimit", "fuel", "memout" }));
+        });
+    }
+
+    [Test]
+    public void TheWordsOfANoResultAreThoseTheSettlementGivesTest()
+    {
+        // What the nodes said last of a problem without a result: a node's refusal of it, the kind
+        // of a fault of the node its row names, a node's fault code of its package, the reason its
+        // package's result was refused, or no answer at all.
+        var reasons = SmtRunSettlement.NO_RESULT_REASONS;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(reasons, Is.Unique);
+            Assert.That(reasons, Does.Contain(SmtRunWords.NODE_REFUSED).And.Contain(SmtRunWords.NO_ANSWER));
+            Assert.That(reasons, Is.SupersetOf(SmtNodeFaults.ALL));
+            Assert.That(reasons, Is.SupersetOf(new[] { "sandbox_unavailable", "backstop", "cancelled", "not_instantiated", "host_fault" }));
+            Assert.That(reasons, Is.SupersetOf(new[] { "unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package" }));
+            Assert.That(reasons, Does.Not.Contain(SmtResultWords.NODE_FAULT), "a row of a node's fault always names its kind");
+        });
+    }
+
+    [Test]
+    public void TheDocumentHoldsToItsSchemaTest()
+    {
+        var capabilities = Capabilities();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-capabilities.schema.json"), capabilities), Is.True);
+            Assert.That(capabilities.GetRawText(), Does.Not.Contain("\"\""), "an empty word is the documents' own for no word, never one of a list");
         });
     }
 
