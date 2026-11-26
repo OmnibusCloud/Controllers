@@ -62,6 +62,14 @@ internal static class SmtSandboxDegree
     /// cap (15.6 MB of models). The problem's part grows with its text (4 MiB at most) and the
     /// guest's stack takes up to 8 MiB more, so the worst session comes near 160 MB; the margin
     /// rounds that up.
+    /// <para>
+    /// What was measured is what a session keeps alive: the heap was collected before each
+    /// reading. The copies a session makes in passing and drops (an answer as characters and
+    /// again as a string, the run's whole output as text, a row's canonical form for its digest
+    /// and its packed image, each up to the session's output cap) are garbage by the next
+    /// collection and are in none of these numbers. So the margin bounds the live memory of a
+    /// session, not what the process has committed between two collections.
+    /// </para>
     /// </summary>
     public const long SESSION_MARGIN_BYTES = 192L << 20;
 

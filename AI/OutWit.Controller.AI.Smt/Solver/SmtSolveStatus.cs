@@ -5,7 +5,9 @@ namespace OutWit.Controller.AI.Smt.Solver;
 /// <c>input_error</c>, <c>output_exceeded</c>, <c>engine_crash</c>, <c>node_fault</c>. Every
 /// status but the last is a statement about the problem under the profile, the same on every
 /// machine; <see cref="NodeFault"/> is a statement about the machine and says nothing about the
-/// problem.
+/// problem. What of the machine still stands behind "the same on every machine" (the native stack
+/// a guest is given, and memory the machine itself could not give) is said where an outcome is
+/// (<see cref="SmtSolveOutcome"/>).
 /// </summary>
 internal enum SmtSolveStatus
 {

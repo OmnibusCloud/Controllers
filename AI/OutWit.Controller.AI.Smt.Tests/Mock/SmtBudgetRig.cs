@@ -103,6 +103,47 @@ internal static class SmtBudgetRig
         }
     }
 
+    /// <summary>
+    /// Runs a package on a budget in one of the two ways a node's adapter never does, and gives
+    /// back what its run threw. The package does not ask for its degree first, so that one of
+    /// which no session fits reaches the budget itself; and, when <paramref name="left"/> is
+    /// given, it gives its turn up as soon as its problems are handed out, while they run.
+    /// </summary>
+    /// <param name="budget">The budget.</param>
+    /// <param name="package">The package's reference.</param>
+    /// <param name="problemsPath">Its file.</param>
+    /// <param name="resultsPath">The file its rows are written to.</param>
+    /// <param name="solver">The scripted solver.</param>
+    /// <param name="left">Called when the package has given its turn up with its problems handed out; null for a package that keeps its turn to the end.</param>
+    /// <returns>What the run threw; null when it ended whole.</returns>
+    public static async Task<Exception?> RunUncheckedAsync(object budget, SmtTaskPackageData package, string problemsPath, string resultsPath, SmtScriptedSolver solver, Action? left = null)
+    {
+        var entering = EnterAsync(budget, CancellationToken.None);
+        await entering;
+        var turn = ResultOf(entering);
+
+        try
+        {
+            var running = RunAsync(turn, package, problemsPath, resultsPath, solver, CancellationToken.None);
+            if (left != null)
+            {
+                ((IDisposable)turn).Dispose();
+                left();
+            }
+
+            await running;
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+        finally
+        {
+            ((IDisposable)turn).Dispose();
+        }
+    }
+
     /// <summary>What a budget counted: its sessions and packages now, the most at once, and how often it read the machine.</summary>
     /// <param name="budget">The budget.</param>
     /// <returns>The numbers.</returns>
@@ -123,11 +164,10 @@ internal static class SmtBudgetRig
         SmtWorkerPool.Run(count, degree, body, makeThread);
     }
 
-    /// <summary>The node's own budget, the one <c>Smt.SolvePackage</c> runs on, with its highest numbers forgotten.</summary>
+    /// <summary>The node's own budget, the one <c>Smt.SolvePackage</c> runs on. It is the process's: its highest numbers are of every package the process has solved so far.</summary>
     /// <returns>The budget.</returns>
     public static object Node()
     {
-        SmtSessionBudget.Node.ResetPeaks();
         return SmtSessionBudget.Node;
     }
 

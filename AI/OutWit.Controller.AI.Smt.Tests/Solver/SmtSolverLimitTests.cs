@@ -188,9 +188,17 @@ public sealed class SmtSolverLimitTests
     [Test]
     public void ASessionCancelledWhileItRunsEndsAtTheSolversNextReadTest()
     {
-        // Ninety-three checks, each a few milliseconds: the session is asked hundreds of times,
-        // and ends at the first ask after the cancellation.
-        const int QUEENS = 8;
+        // Ten queens have 724 placements: hundreds of checks, each a few milliseconds, and the
+        // session is asked several times a check. It ends at the first ask after the cancellation.
+        //
+        // The cancel comes by a clock, and cannot come by an event: a session of the real solver
+        // is one call, and gives a test nothing to wait for between two of its reads (the
+        // scripted sessions cancel between two given reads, and hold what is kept at each). So
+        // the work is made long against the clock instead: the enumeration takes seconds, and a
+        // timer that fires hundreds of milliseconds late still falls inside it. What is held is
+        // true wherever the cancel falls, before the first read too.
+        const int QUEENS = 10;
+        const int PLACEMENTS = 724;
         var problem = SmtSolverProblems.Enumerate("queens", SmtSolverProblems.Queens(QUEENS), 1_000, SmtSolverProblems.QueenNames(QUEENS));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(40));
 
@@ -199,7 +207,7 @@ public sealed class SmtSolverLimitTests
         Assert.Multiple(() =>
         {
             Assert.That(solved.Words(), Is.EqualTo("node_fault cancelled"), solved.ToString());
-            Assert.That(solved.Count, Is.LessThan(92), "it did not run to its end");
+            Assert.That(solved.Count, Is.LessThan(PLACEMENTS), "it did not run to its end");
             Assert.That(solved.Verdict, Is.EqualTo("none"));
         });
     }

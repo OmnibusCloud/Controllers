@@ -4,8 +4,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace OutWit.Controller.AI.Smt.Adapters;
 
 /// <summary>
-/// The logger every Smt adapter logs through: the host's logger behind one lock, with the
-/// logger's own exceptions swallowed. A logging call never decides what becomes of a package.
+/// The logger every Smt adapter logs through: the host's logger behind a lock of this
+/// controller's, with the logger's own exceptions swallowed. A logging call never decides what
+/// becomes of a package.
 /// <para>
 /// A host gives a controller whatever logger it has; older cloud clients gave an in-memory list
 /// without a lock, and a share of several packages logs from several threads at once. The
@@ -13,12 +14,20 @@ namespace OutWit.Controller.AI.Smt.Adapters;
 /// this one, and the base's own lines are held to the same rule. A line the logger refused is
 /// lost and counted (<see cref="Swallowed"/>); nothing else is told.
 /// </para>
+/// <para>
+/// The lock keeps this controller's own lines from each other. It does not make the host's
+/// logger safe: the other controllers of the process log into the same logger behind locks of
+/// their own, so a line of theirs can still meet a line of Smt's inside it. What makes a call
+/// here safe whatever the logger does is that it is caught: a logger that breaks under two
+/// writers loses the line, and never the package.
+/// </para>
 /// </summary>
 internal sealed class SmtLoggerGuarded : ILogger
 {
     #region Constants
 
-    // One lock for the process: the adapters of a node share one logger, whatever wraps it.
+    // One lock for every Smt adapter of the process: they share the host's one logger, whatever
+    // wraps it. The other controllers' lines do not pass through it (see the class's summary).
     private static readonly object GATE = new();
 
     #endregion

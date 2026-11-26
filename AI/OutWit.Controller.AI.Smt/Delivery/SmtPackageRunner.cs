@@ -121,31 +121,6 @@ internal static class SmtPackageRunner
     }
 
     /// <summary>
-    /// Solves the problems of a checked package with a pool of its own of a given degree and writes a
-    /// row of each to a package of results, as its session ends: the package alone on a budget of
-    /// <paramref name="degree"/> sessions (<see cref="RunAsync"/>).
-    /// </summary>
-    /// <param name="package">The reference: its options, its ticket.</param>
-    /// <param name="problemsPath">The package's blob, checked (<see cref="EnsureBlob"/>).</param>
-    /// <param name="sandbox">The sandbox the sessions run in.</param>
-    /// <param name="degree">The sessions at once.</param>
-    /// <param name="resultsPath">The file the package of results is written to (made new).</param>
-    /// <param name="problemDone">Called after each problem's row is written, on the thread that solved it.</param>
-    /// <param name="logger">Receives a line for each problem that ended as a fault of the node.</param>
-    /// <param name="cancellationToken">The job's token: no problem is handed out after it is cancelled, and the running sessions end at their next read.</param>
-    /// <returns>The package file, complete, and how many rows it holds.</returns>
-    /// <exception cref="OperationCanceledException">The job was cancelled; the file is deleted.</exception>
-    /// <exception cref="SmtPackageException">The package's blob changed between its check and its reading.</exception>
-    /// <exception cref="IOException">The node's own files failed.</exception>
-    public static SmtWrittenResults Run(SmtTaskPackageData package, string problemsPath, SmtSandbox sandbox, int degree, string resultsPath,
-        Action? problemDone, ILogger logger, CancellationToken cancellationToken)
-    {
-        var budget = new SmtSessionBudget(degree);
-        using var turn = budget.EnterAsync(cancellationToken).GetAwaiter().GetResult();
-        return RunAsync(turn, package, problemsPath, Solver(sandbox, logger), resultsPath, problemDone, logger, cancellationToken).GetAwaiter().GetResult();
-    }
-
-    /// <summary>
     /// Solves the problems of a checked package on the sessions of a budget, beside the problems of
     /// the other packages it holds, and writes a row of each to a package of results as its session
     /// ends. The problems are read from the blob one at a time as sessions take them, and the blob is

@@ -28,6 +28,7 @@ public sealed class SmtSessionBudgetMemoryTests : SmtSessionBudgetTestBase
     [TestCase(8, 24, 4_096)]
     [TestCase(32, 0, 1_024)]
     [TestCase(6, 12, 64)]
+    [CancelAfter(120_000)]
     public async Task SessionsOfOneSizeAreTheDegreeRulesTest(int cores, int gigabytes, int memoryMegabytes)
     {
         var options = new SmtOptionsData { MemoryMegabytes = memoryMegabytes };
@@ -36,12 +37,24 @@ public sealed class SmtSessionBudgetMemoryTests : SmtSessionBudgetTestBase
         var budget = SmtBudgetRig.Budget(cores, available);
         var solver = new SmtScriptedSolver(_ => FAST_MS);
 
-        // Two packages, each with more problems than the degree.
+        // Two packages, each with more problems than the degree. The first problems of the first
+        // package, as many as the degree, run until that many sessions run at once: the budget
+        // reaches the degree by its own doing, not because the problems were slow enough for the
+        // threads to meet. A budget that gave fewer sessions would leave them held to their limit.
         var packages = new[] { Package("a", 3 * degree, options), Package("b", 3 * degree, options) };
+        var held = Enumerable.Range(0, degree).Select(packages[0].Id).ToList();
+        held.ForEach(solver.Hold);
+        solver.Started += session =>
+        {
+            if (session.RunningAtStart >= degree)
+                held.ForEach(solver.Release);
+        };
+
         var runs = await SolveAllAsync(budget, solver, packages);
 
         Assert.Multiple(() =>
         {
+            Assert.That(solver.Sessions.Where(session => session.TimedOut).Select(session => session.Id), Is.Empty, "the degree was reached: every held problem was let go");
             Assert.That(runs.Select(run => run.Degree), Has.All.EqualTo(degree), "each package is told the rule's degree");
             Assert.That(runs.Select(run => run.Reason), Has.All.EqualTo(reason));
             Assert.That(solver.PeakRunning, Is.EqualTo(degree), "and the budget runs exactly that many of its sessions at once");
@@ -141,6 +154,35 @@ public sealed class SmtSessionBudgetMemoryTests : SmtSessionBudgetTestBase
         });
 
         AssertOwnRows(runs[1], taken);
+        AssertIdle(budget);
+    }
+
+    [Test]
+    [CancelAfter(120_000)]
+    public async Task APackageOfWhichNoSessionFitsThatReachesTheBudgetFailsThereTest()
+    {
+        // The budget's own guard, behind the refusal a package gets when it asks for its degree:
+        // a package no session of which fits, handed to the budget all the same, must not wait
+        // without end for room that never comes. Three quarters of 3 GiB hold no session at the
+        // default options.
+        var budget = SmtBudgetRig.Budget(8, 3 * GIGABYTE);
+        var solver = new SmtScriptedSolver(_ => FAST_MS);
+        var large = Package("large", 4);
+        var small = Package("small", 4, new SmtOptionsData { MemoryMegabytes = 64 });
+
+        var failure = await SmtBudgetRig.RunUncheckedAsync(budget, large.Reference, large.ProblemsPath, large.ResultsPath, solver);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(failure, Is.InstanceOf<InvalidOperationException>().With.Message.EqualTo("not one session of the package fits in the budget"));
+            Assert.That(solver.Sessions, Is.Empty, "nothing of it ran");
+            Assert.That(File.Exists(large.ResultsPath), Is.False, "and it leaves no file of rows");
+        });
+        AssertIdle(budget);
+
+        var runs = await SolveAllAsync(budget, solver, small);
+
+        AssertOwnRows(runs[0], small);
         AssertIdle(budget);
     }
 

@@ -209,6 +209,40 @@ public sealed class SmtSolvePackageTests
         });
     }
 
+    [Test]
+    public async Task APackageWhoseBlobTheCacheDroppedBeforeItsTurnIsFetchedAgainTest()
+    {
+        // The node's blob cache drops the package's file as soon as the package has it, which is
+        // before its turn on the node's budget comes: the package waits there with its blob
+        // downloaded, for as long as the packages before it take, and a cache may need the room.
+        var problem = SmtGoldenPackages.Indexed(SmtSolverProblems.Check("ok", SmtSolverCases.ONE_SOLUTION, "x"), 0);
+        var package = await SmtNodeRig.PublishAsync([problem], new SmtOptionsData(), m_blobs, m_folder);
+        var cache = new SmtTestBlobCache(m_blobs, Path.Combine(m_folder, "cache"));
+        var manager = new SmtTestProcessingManager();
+        manager.OnProgress = (_, stage) =>
+        {
+            // The report that ends the delivery: the package's blob has arrived.
+            if (stage == "0/1 problems")
+                cache.Drop();
+        };
+
+        var pool = new WitVariableCollection();
+        var status = await SmtAdapterRig.Start(package, cache, manager, pool);
+        var result = SmtAdapterRig.Result(pool);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+        Assert.That(result, Is.Not.Null);
+
+        var rows = SmtNodeRig.ReadRows(await m_blobs.GetLocalPathAsync(result!.ResultsBlobId), package.ProblemCount);
+        Assert.Multiple(() =>
+        {
+            Assert.That(cache.Dropped, Is.EqualTo(1), "the cache dropped the file the package had been given");
+            Assert.That(cache.Fetches, Is.EqualTo(2), "and the package fetched its blob again when its turn came");
+            Assert.That(result.FaultCode, Is.Empty);
+            Assert.That(rows.Select(row => row.Digest), Is.EqualTo(new[] { SmtNodeRig.Row(problem, new SmtOptionsData()).Digest }), "the row is the one a session of the problem gives");
+        });
+    }
+
     #endregion
 
     #region Fault Tests

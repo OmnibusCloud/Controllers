@@ -112,6 +112,12 @@ public sealed class SmtSessionBudgetTests : SmtSessionBudgetTestBase
         // over the degree, 5.6 s (its schedule on exact clocks is 6.25 s: the last package's slowest
         // problem starts when that package is let in). A runner's clocks and threads add to both
         // alike, so the two are held to each other, and the shared one to the work loosely.
+        //
+        // This test is held by a clock and cannot be held by an event: what it states is a
+        // duration. That the next package's problems start while a package's slowest one runs is
+        // held by events in the first test of this fixture; here the bounds are wide of the exact
+        // schedule (1.5 against 1.12 of the work over the degree, 0.7 against 0.52 of one package
+        // at a time), so a runner has to lose seconds, on problems of a quarter of one, to fail it.
         const int SESSIONS = 4;
         const int SLOW_MS = 2_000;
         const int QUICK_MS = 250;
@@ -155,7 +161,22 @@ public sealed class SmtSessionBudgetTests : SmtSessionBudgetTestBase
         });
         var solver = new SmtScriptedSolver(_ => FAST_MS);
 
+        // The stretch is one stretch by the packages' own order, not by a clock: the last problem
+        // of each package runs until a problem of the package after it has started, so a package
+        // is still open when the next one asks for its degree.
         var share = Enumerable.Range(0, 4).Select(index => Package($"share{index}", 6)).ToArray();
+        for (var index = 0; index < share.Length - 1; index++)
+            solver.Hold(share[index].Id(5));
+
+        solver.Started += session =>
+        {
+            for (var index = 1; index < share.Length; index++)
+            {
+                if (session.Ticket == share[index].Reference.Ticket)
+                    solver.Release(share[index - 1].Id(5));
+            }
+        };
+
         var runs = await SolveAllAsync(budget, solver, share);
         var readsInShare = Volatile.Read(ref reads);
 
@@ -164,6 +185,7 @@ public sealed class SmtSessionBudgetTests : SmtSessionBudgetTestBase
 
         Assert.Multiple(() =>
         {
+            Assert.That(solver.Sessions.Where(session => session.TimedOut).Select(session => session.Id), Is.Empty, "every held problem was let go by the next package's start");
             Assert.That(readsInShare, Is.EqualTo(1), "one reading for the share");
             Assert.That(Volatile.Read(ref reads), Is.EqualTo(2), "a package after it reads again");
             Assert.That(SmtBudgetRig.Counts(budget).Reads, Is.EqualTo(2));

@@ -15,7 +15,7 @@ namespace OutWit.Controller.AI.Smt.Live.Local;
 /// time, <see cref="SmtSessionBudget"/>). Each
 /// package is first checked as a node checks it (<see cref="SmtPackageRunner.EnsureAcceptable"/>,
 /// <see cref="SmtPackageRunner.EnsureBlob"/>); every problem is solved by the node's session code
-/// (<see cref="SmtSolver.Solve(SmtProblemData, SmtOptionsData, SmtSandbox?, string?, CancellationToken)"/>)
+/// (<see cref="SmtSolver.Solve(SmtProblemData, SmtOptionsData, SmtSandbox?, string?, CancellationToken, Microsoft.Extensions.Logging.ILogger?)"/>)
 /// under its package's options on the node's worker threads (<see cref="SmtWorkerPool"/>, below
 /// normal priority); its row is made by the node's code with its package's ticket and its digest
 /// (<see cref="SmtResultRows.Of"/>) and written to its package's result package as its session

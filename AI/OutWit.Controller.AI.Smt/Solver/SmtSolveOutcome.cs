@@ -13,6 +13,19 @@ namespace OutWit.Controller.AI.Smt.Solver;
 /// something about the machine and nothing about the problem.
 /// </para>
 /// <para>
+/// Two things of the machine stand behind that claim without being counts of the profile. How
+/// deep the solver's own code may call itself is a number of bytes of native stack the sandbox
+/// gives a guest, and the bytes of one call are the compiler's for the machine: a problem that
+/// ended there would end as a crash on one machine and as an answer on another. The tests hold
+/// problems nested as deep as the reader takes one to the same row on Windows x64, Linux x64 and
+/// macOS arm64, in both trap modes; none ends there. And memory: a growth of its memory the
+/// solver is refused reaches it in one way whoever refused it, and the outcome is then
+/// <c>unknown</c> by <c>memout</c>. Its own ceiling and the host's cap refuse at the same number
+/// on every machine; a machine that could not give the memory the cap allows would refuse
+/// earlier, and the outcome does not tell the two apart. The node's budget of sessions is what
+/// keeps a session from meeting that.
+/// </para>
+/// <para>
 /// A verdict is claimed by an outcome whose status is <see cref="SmtSolveStatus.Ok"/>, and by
 /// one whose output passed its cap after the solver had answered the check: the solver said
 /// <c>sat</c>, and it is the model that did not fit
