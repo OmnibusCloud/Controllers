@@ -143,8 +143,9 @@ ceilings (resource limit 4,294,967,295, hard cap 600 s, memory 4,096 MB):
   at the competition). Three hundred is three times that and five times the top of the band: a
   problem of 60 s that is five times slower now still finishes. A problem the cap stops costs a
   node the whole cap, so the ceiling of 600 would double the cost of the few it might save. The
-  upper bound of a run is 1,960 x 300 = 588,000 s; the sample puts the work itself near 1,960 x
-  7.5, about 15,000 s of the reference machine.
+  upper bound of a run is 1,960 x 300 = 588,000 s. The first whole run measured the work itself:
+  164,617,359,224,432 fuel, about 32,900 s of the reference machine, 12,900 s of it the 43
+  problems the cap stopped (`EXPECTED.md`).
 - **`--rlimit 4294967295`**: the resource limit at its ceiling, so that the hard cap alone ends a
   problem. The resource counter's rate differs from problem to problem by orders of magnitude:
   the sample's costliest problem counts 320 million in its 98 s, over the default of 150 million,

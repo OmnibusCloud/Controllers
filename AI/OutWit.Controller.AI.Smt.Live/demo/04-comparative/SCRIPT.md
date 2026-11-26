@@ -134,7 +134,18 @@ bin/Release/net10.0/smt-live comparative $OUT/local-cores $OUT/fleet --fixed $OU
 
 ## Measured
 
-The first run of this script fills a table here: the date and the controller's version, the
-machines on each side, the set and the options, each side's wall time and its parts, the problems
-a second, the rows compared and equal, the flips, the failed validations, the retries, and the
-crossover with its lines, at the node's degree and at as many sessions as the Mac has cores.
+The first run of this script, on the long-tail kit (1,960 problems, the options of its
+`SCRIPT.md`); every number is also in the table at the end of
+[`../03-long-tail/EXPECTED.md`](../03-long-tail/EXPECTED.md).
+
+| | The fleet (`run`) | One machine (`local`) |
+|---|---|---|
+| Date, controller version | 2026-11-25, 0.5.0 | 2026-11-24, 0.4.0 (the same session code) |
+| Machines | three Windows x64 nodes took the work (three Linux x64 nodes online, under the 7,680 MiB a node needs, took none) | one osx-arm64 machine, 18 cores, 48 GiB, 18 sessions at once (as many as its cores) |
+| Wall time, end to end | 01:13:02: the upload 52 s, the job 01:12:06 | 00:21:03: the solve 00:20:41 |
+| Rows | 1,960 compared, 1,960 digests equal, 0 flips | |
+| Failed validations, retries | 0; repairs 0, disputes 0 | 0; none (one machine makes no copies) |
+| Crossover | the one machine finishes first at every size: the fleet 13.6 s fixed + 2.229 s a problem, the one machine 4.888 s + 0.642 s | |
+
+Not recorded: a run on the one machine at the node's own degree (the rule caps it at 16
+sessions), and the operator's effort beside each side.

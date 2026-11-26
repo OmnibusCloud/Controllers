@@ -378,8 +378,8 @@ Ctrl+C stops the tool's work at the first press and ends the tool at the second.
 ## Demo kits
 
 - [`demo/01-known-answers`](demo/01-known-answers/SCRIPT.md): the 469 SMT-LIB problems of the
-  controller's slice tests, fetched by the tests' own list and fetcher and packed; every verdict
-  must be the list's and every class of the evaluator the slice test's.
+  controller's slice tests, fetched by the tests' own list and fetcher and packed, the set held to
+  its SHA-256; every verdict must be the list's and every class of the evaluator the slice test's.
 - [`demo/02-eight-queens`](demo/02-eight-queens/SCRIPT.md): two enumerations (eight queens, 92
   models; a Latin square with exactly one), the smoke test of a fleet.
 - [`demo/03-long-tail`](demo/03-long-tail/SCRIPT.md): the long tail, 1,960 SMT-LIB problems of
@@ -414,6 +414,7 @@ three. A test of the category `Slice` runs `local` on eight problems of the slic
 tests fetch, each with the list's verdict. The test project lives in the tool's folder; it is in
 the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the controller's
 tests (the slice test in its job "slice"), and runs the self-contained build of each platform on
-the eight-queens kit from where its zip was unpacked. The long-tail kit's Python scripts have tests
-of their own in `demo/03-long-tail/tests` (`python -I -m unittest discover -s tests -t tests` in
-the kit's folder), which the workflow "AI Smt long tail" runs.
+the eight-queens kit from where its zip was unpacked. The Python scripts of the known-answers and
+the long-tail kits have tests of their own in `demo/01-known-answers/tests` and
+`demo/03-long-tail/tests` (`python -I -m unittest discover -s tests -t tests` in the kit's
+folder), which the workflows "AI Smt" and "AI Smt long tail" run.

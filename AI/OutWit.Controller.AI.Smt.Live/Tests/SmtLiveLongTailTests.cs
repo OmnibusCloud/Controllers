@@ -141,8 +141,8 @@ public sealed class SmtLiveLongTailTests
         var expected = Read("EXPECTED.md");
         var sample = File.ReadAllText(Path.Combine(SmtLiveFixtures.RepositoryRoot(), SAMPLE_TEST));
 
-        var options = Regex.Match(check, @"OPTIONS = \{""query"": ""check"", ""rlimit"": (\d+), ""hard_cap_s"": (\d+), ""memory_mb"": (\d+)\}");
-        Assert.That(options.Success, Is.True, "check.py states the kit's options");
+        var options = Regex.Match(check, @"OPTIONS = \{""query"": ""check"", ""rlimit"": (\d+), ""hard_cap_s"": (\d+), ""memory_mb"": (\d+), ""seed"": 0\}");
+        Assert.That(options.Success, Is.True, "check.py states the kit's options, the seed among them: the default, which the commands leave unset");
         var (rlimit, hardCap, memory) = (options.Groups[1].Value, options.Groups[2].Value, options.Groups[3].Value);
         var line = $"--rlimit {rlimit} --hard-cap {hardCap} --memory {memory}";
 

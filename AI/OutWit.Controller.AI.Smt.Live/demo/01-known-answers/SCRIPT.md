@@ -13,13 +13,19 @@ checked by the server's evaluator, and with every package on two machines every 
 - `make_set.py` fetches the slice with the tests' fetcher and list
   (`AI/OutWit.Controller.AI.Smt.Tests/Slice/fetch.py` and `fetch-list.tsv`) into a work folder and
   packs it with `smt-live pack`: one `check` row a problem, its id the list's (`p000` ...), its
-  expected verdict the problem's `:status`. The fetcher needs `zstd` on the PATH and streams the
-  archives of the ten logics from Zenodo (an archive is a stream of up to 1.7 GB); a file already
-  fetched is not fetched again.
-- `check.py` holds a run's documents to the list (every verdict), to the evaluator's classes by
-  logic that the solver's slice test pins (read from `Solver/SmtSolverSliceTests.cs`), and to an
-  integrity document without lies, disagreements, problems without a result or standing disputes.
-  It prints the table by logic and the run's totals.
+  expected verdict the problem's `:status`; it prints the set's SHA-256 and holds it to the one
+  `EXPECTED.md` names. The fetcher needs `zstd` on the PATH and streams the archives of the ten
+  logics from Zenodo (an archive is a stream of up to 1.7 GB); a file already fetched is hashed,
+  and fetched again unless it is the list's.
+- `check.py` holds a run's documents to the kit: the set (its SHA-256), the pinned module and the
+  options of the commands below; the list (every verdict, and no row of another problem); the
+  statuses, the agreement with the expected verdicts and the copies `EXPECTED.md` gives; the
+  evaluator's classes by logic that the solver's slice test pins (read from
+  `Solver/SmtSolverSliceTests.cs`); and an integrity document that says, and says 0 for, the
+  lies, the disagreements, the problems without a result and the standing disputes. It prints the
+  table by logic and the run's totals.
+- `tests/`: the tests of `make_set.py`, `check.py` and the slice fetcher, on made-up sets and runs
+  (`python -I -m unittest discover -s tests -t tests`); the workflow "AI Smt" runs them.
 - `EXPECTED.md`: what a run must show.
 
 The work folder holds the fetched problems: it is never committed (`demo-out/` is ignored).
@@ -48,7 +54,9 @@ machines, so every answer is compared by its digest.
    `unsat`; the options as numbers; the upper bound of the work (469 problems times the hard cap)
    and the packages a run makes.
 2. **The run**: the progress, then the four documents downloaded and each held to its schema.
-3. **The summary**: every row `ok`; the verdicts `sat 225, unsat 244, unknown 0`; every expected
+3. **The summary**: every row `ok` but one, `p235`, which is `output_exceeded` (its model is more
+   than the 16 MiB a session may write; its verdict stands); the verdicts `sat 225, unsat 244,
+   unknown 0`; every expected
    verdict agreed with; the evaluator's classes by logic; every problem answered by two machines
    that agree; no lie, no disagreement between the evaluator and the solver, no problem without a
    result. `smt-live run` exits 3 and says why when any of that is not so.

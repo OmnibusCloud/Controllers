@@ -10,9 +10,11 @@ the logic's archive, the size, the SHA-256, the expected verdict and the licence
 text is in the list, and none is ever committed.
 
 Streams each logic's archive from Zenodo once through `zstd -dc` (the zstd tool must be on the
-PATH), writes every listed member as <out-dir>/<id>.smt2 and checks its SHA-256 against the
-list; nothing else of the archive is kept. A file that is already there is not fetched again.
-Also writes <out-dir>/ATTRIBUTION.tsv (id, SMT-LIB path, licence).
+PATH), checks every listed member against the SHA-256 of the list and writes it as
+<out-dir>/<id>.smt2 (first as <id>.smt2.part, renamed when it is whole); nothing else of the
+archive is kept. A file that is already there is hashed: it is kept when it is the list's, and
+fetched again when it is not (a file of an older list, a file a killed run left short). Also
+writes <out-dir>/ATTRIBUTION.tsv (id, SMT-LIB path, licence).
 Exits 1 when a listed file is missing or differs.
 """
 
@@ -32,6 +34,30 @@ def read_list(path):
     with open(path, encoding="utf-8") as handle:
         header = handle.readline().rstrip("\r\n").split("\t")
         return [dict(zip(header, line.rstrip("\r\n").split("\t"))) for line in handle if line.strip()]
+
+
+def has(path, sha256):
+    """Whether a file is there with the SHA-256 the list gives it."""
+    if not os.path.exists(path):
+        return False
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest() == sha256
+
+
+def missing_members(members, out):
+    """The members of one logic whose file is not there with the list's SHA-256."""
+    return {name for name, row in members.items() if not has(os.path.join(out, row["id"] + ".smt2"), row["sha256"])}
+
+
+def keep(out, row, data):
+    """Writes a fetched file whole or not at all: to <id>.smt2.part, then renamed."""
+    path = os.path.join(out, row["id"] + ".smt2")
+    with open(path + ".part", "wb") as handle:
+        handle.write(data)
+    os.replace(path + ".part", path)
 
 
 def pump(url, sink):
@@ -65,7 +91,7 @@ def main(argv):
     bad = 0
     for logic in sorted(wanted):
         members = wanted[logic]
-        missing = {name for name in members if not os.path.exists(os.path.join(out, members[name]["id"] + ".smt2"))}
+        missing = missing_members(members, out)
         if not missing:
             print("%s: all %d already here" % (logic, len(members)), flush=True)
             continue
@@ -83,8 +109,7 @@ def main(argv):
                     print("DIFFERS %s %s" % (row["id"], member.name))
                     bad += 1
                     continue
-                with open(os.path.join(out, row["id"] + ".smt2"), "wb") as handle:
-                    handle.write(data)
+                keep(out, row, data)
                 missing.discard(member.name)
                 if not missing:
                     break
