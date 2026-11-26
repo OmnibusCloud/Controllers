@@ -10,14 +10,16 @@ namespace OutWit.Controller.AI.Smt.Live.Commands;
 
 /// <summary>
 /// <c>comparative</c>: the comparative table of one set, from a folder <c>local</c> wrote and a
-/// folder <c>run</c> wrote for the same set. First whether the two ran the same thing: the same
-/// set, the same module, the same options but the sampling rate. Then each side's measured wall
-/// time from the tool's start to the documents on disk and its parts, its problems a second, its
-/// verdicts, its failed validations, its retries and the disagreements among its copies. Then the
-/// rows side by side, digest against digest (<see cref="SmtLiveRowComparison"/>), with the flips.
-/// Then the crossover (<see cref="SmtLiveCrossover"/>), with what it assumes, when a fleet run of
-/// a small set measured the fleet's fixed cost. Every number is read from what the two commands
-/// wrote; nothing is estimated and shown as measured.
+/// folder <c>run</c> wrote for the same set. A measurement is read only beside the documents of
+/// the set it measured. First whether the two ran the same thing: the same set, the same module,
+/// the same options but the sampling rate. Then each side's measured wall time from the tool's
+/// start to the documents on disk and its parts, its problems a second, its verdicts, its failed
+/// validations, its retries and the disagreements among its copies. Then the rows side by side,
+/// digest against digest (<see cref="SmtLiveRowComparison"/>), with the flips. Then the crossover
+/// (<see cref="SmtLiveCrossover"/>), with what it assumes: only from two runs that ran the same
+/// thing and agree row by row, and a fleet run of a small set (<c>--fixed</c>) that completed and
+/// ran the fleet run's module with its options and its sampling rate. Every number is read from
+/// what the two commands wrote; nothing is estimated and shown as measured.
 /// </summary>
 internal sealed class SmtLiveComparative
 {
@@ -29,6 +31,9 @@ internal sealed class SmtLiveComparative
 
     // The most differences of the two runs' options a comparison names.
     private const int MAX_DIFFERENCES_SHOWN = 10;
+
+    // The server's word for a job that completed, as fleet.json keeps it.
+    private const string COMPLETED = "Completed";
 
     #endregion
 
@@ -59,12 +64,16 @@ internal sealed class SmtLiveComparative
     /// <param name="localFolder">The folder <c>local</c> wrote.</param>
     /// <param name="fleetFolder">The folder <c>run</c> wrote.</param>
     /// <param name="fixedFolder">The folder <c>run</c> wrote for a small set, which measures the fleet's fixed cost; null without one.</param>
-    /// <returns>0 when both ran the same set, module and options and every row is the same; 1 when anything differs; 2 when a document is not there.</returns>
+    /// <returns>
+    /// 0 when both ran the same set, module and options and every row is the same; 4 when anything
+    /// differs; 2 when a document is not there or a measurement is not of its folder's set.
+    /// </returns>
     public int Run(string localFolder, string fleetFolder, string? fixedFolder)
     {
-        var missing = Missing(localFolder, true) ?? Missing(fleetFolder, false) ?? (fixedFolder != null && !SmtLiveMeasured.IsIn(fixedFolder, false)
-            ? $"{Path.Combine(fixedFolder, SmtLiveFleetFacts.FILE)} is not there: --fixed takes a folder run wrote for a small set"
-            : null);
+        var missing = Missing(localFolder, true) ?? Missing(fleetFolder, false) ?? (fixedFolder == null ? null : Missing(fixedFolder, false)) ??
+            (fixedFolder != null && !SmtLiveMeasured.IsIn(fixedFolder, false)
+                ? $"{Path.Combine(fixedFolder, SmtLiveFleetFacts.FILE)} is not there: --fixed takes a folder run wrote for a small set"
+                : null);
         if (missing != null)
         {
             m_output.WriteLine(missing);
@@ -86,10 +95,18 @@ internal sealed class SmtLiveComparative
             return SmtLiveExitCodes.USAGE;
         }
 
-        m_output.WriteLine($"comparative: {localFolder} (local) and {fleetFolder} (fleet)");
-
         using var localDocs = SmtLiveRunDocuments.Read(localFolder);
         using var fleetDocs = SmtLiveRunDocuments.Read(fleetFolder);
+        using var smallDocs = fixedFolder == null ? null : SmtLiveRunDocuments.Read(fixedFolder);
+        var foreign = Foreign(SmtLiveLocalFacts.FILE, localFolder, local, localDocs) ?? Foreign(SmtLiveFleetFacts.FILE, fleetFolder, fleet, fleetDocs) ??
+                      (fixedFolder == null ? null : Foreign(SmtLiveFleetFacts.FILE, fixedFolder, small, smallDocs!));
+        if (foreign != null)
+        {
+            m_output.WriteLine(foreign);
+            return SmtLiveExitCodes.USAGE;
+        }
+
+        m_output.WriteLine($"comparative: {localFolder} (local) and {fleetFolder} (fleet)");
         var same = PrintSameness(localDocs, fleetDocs);
 
         PrintTable(local, fleet, localDocs, fleetDocs);
@@ -97,7 +114,11 @@ internal sealed class SmtLiveComparative
         var rows = SmtLiveRowComparison.Of(Path.Combine(localFolder, SmtLiveDocuments.RESULTS.File), Path.Combine(fleetFolder, SmtLiveDocuments.RESULTS.File));
         PrintRows(rows);
 
-        PrintCrossover(local, fleet, small);
+        var notDrawn = !same ? "the two runs did not run the same thing (above): their times are not of one experiment"
+            : !rows.AllSame ? "the two runs' rows differ (above): their times are not of the same work"
+            : small == null ? null
+            : SmallRunDiffers(fleetDocs, small, smallDocs!);
+        PrintCrossover(local, fleet, small, notDrawn);
         m_output.WriteLine("operator  : not measured by the tool; SCRIPT.md of the comparative test lists the steps of each side");
 
         if (same && rows.AllSame)
@@ -107,7 +128,46 @@ internal sealed class SmtLiveComparative
         }
 
         m_output.WriteLine($"{SmtLiveRunSummary.LOUD}result    : THE TWO RUNS DIFFER{(same ? "" : " in what they ran")}{(rows.AllSame ? "" : ", row by row")}");
-        return SmtLiveExitCodes.FAILED;
+        return SmtLiveExitCodes.DIFFER;
+    }
+
+    /// <summary>
+    /// Why a measurement is not of its folder's run: the set it measured is not the set the
+    /// folder's provenance names (a measurement left in a folder another run wrote into); null
+    /// when it is.
+    /// </summary>
+    private static string? Foreign(string file, string folder, SmtLiveMeasured? measured, SmtLiveRunDocuments documents)
+    {
+        if (measured == null)
+            return null;
+
+        var set = Text(documents.Provenance, "problem_set", "sha256");
+        return measured.SetSha256.Length > 0 && measured.SetSha256 == set
+            ? null
+            : $"{Path.Combine(folder, file)} measured the set {measured.SetSha256}, its provenance names the set {set}: " +
+              "the folder holds the documents of one run and the measurement of another";
+    }
+
+    /// <summary>
+    /// Why the small fleet run cannot give the fleet's fixed cost: it did not complete, or it ran
+    /// another module, other options or another sampling rate than the fleet run; null when it can.
+    /// </summary>
+    private static string? SmallRunDiffers(SmtLiveRunDocuments fleet, SmtLiveMeasured small, SmtLiveRunDocuments smallDocs)
+    {
+        if (small.Status != COMPLETED)
+            return $"the --fixed run did not complete ({small.Status})";
+
+        var differences = new List<string>();
+        var module = Text(fleet.Provenance, "profile", "module_sha256");
+        var smallModule = Text(smallDocs.Provenance, "profile", "module_sha256");
+        if (module.Length == 0 || module != smallModule)
+            differences.Add($"module sha256 {smallModule}, the fleet run's {module}");
+
+        Differences(At(smallDocs.Provenance, "options"), At(fleet.Provenance, "options"), "options", differences, MAX_DIFFERENCES_SHOWN);
+        Differences(At(smallDocs.Provenance, "sampling_rate"), At(fleet.Provenance, "sampling_rate"), "sampling_rate", differences, MAX_DIFFERENCES_SHOWN);
+        return differences.Count == 0
+            ? null
+            : $"the --fixed run differs from the fleet run ({string.Join("; ", differences)}): its time is not of the same work at that fleet's size";
     }
 
     private static string? Missing(string folder, bool local)
@@ -199,11 +259,17 @@ internal sealed class SmtLiveComparative
             m_output.WriteLine($"  and {shown - rows.Shown.Count} more");
     }
 
-    private void PrintCrossover(SmtLiveMeasured local, SmtLiveMeasured? fleet, SmtLiveMeasured? small)
+    private void PrintCrossover(SmtLiveMeasured local, SmtLiveMeasured? fleet, SmtLiveMeasured? small, string? notDrawn)
     {
         if (fleet == null)
         {
             m_output.WriteLine($"crossover : not computed: the fleet run has no {SmtLiveFleetFacts.FILE} (a run of an older smt-live measured nothing)");
+            return;
+        }
+
+        if (notDrawn != null)
+        {
+            m_output.WriteLine($"crossover : not computed: {notDrawn}");
             return;
         }
 
@@ -220,6 +286,8 @@ internal sealed class SmtLiveComparative
         {
             SmtLiveCrossoverKind.FleetAbove => $"the fleet finishes first above {Problems(crossover.Problems)} problems of this kind, this machine below",
             SmtLiveCrossoverKind.FleetBelow => $"the fleet finishes first below {Problems(crossover.Problems)} problems of this kind, this machine above",
+            SmtLiveCrossoverKind.FleetAlways when crossover.Problems is { } beyond =>
+                $"the fleet finishes first at every size a set may have (the lines cross at {Problems(beyond)} problems, above the {SmtProblemSetLimits.MAX_ROWS:N0} rows a set may have)",
             SmtLiveCrossoverKind.FleetAlways => "the fleet finishes first at every size",
             SmtLiveCrossoverKind.LocalAlways when crossover.Problems is { } far =>
                 $"this machine finishes first at every size a set may have (the lines cross at {Problems(far)} problems, above the {SmtProblemSetLimits.MAX_ROWS:N0} rows a set may have)",

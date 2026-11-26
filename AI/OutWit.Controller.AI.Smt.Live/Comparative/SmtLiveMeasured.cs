@@ -6,16 +6,20 @@ namespace OutWit.Controller.AI.Smt.Live.Comparative;
 
 /// <summary>
 /// What one side of the comparative test measured, as its folder's <c>local.json</c> or
-/// <c>fleet.json</c> says: the problems it took, its wall time from the tool's start to the
-/// documents on disk, its parts in order, and for a local run its fixed part (the start-up to the
-/// sandbox ready). Numbers are read as written; none is made up.
+/// <c>fleet.json</c> says: the set it measured, the problems it took, its wall time from the
+/// tool's start to the documents on disk, its parts in order, for a local run its fixed part (the
+/// start-up to the sandbox ready), and for a fleet run how its job ended. Numbers are read as
+/// written; none is made up.
 /// </summary>
 internal sealed class SmtLiveMeasured
 {
     #region Constructors
 
-    private SmtLiveMeasured(long taken, double wall, double? startup, IReadOnlyList<(string Name, double Seconds)> parts, string description)
+    private SmtLiveMeasured(string setSha256, string status, long taken, double wall, double? startup, IReadOnlyList<(string Name, double Seconds)> parts,
+        string description)
     {
+        SetSha256 = setSha256;
+        Status = status;
         Taken = taken;
         Wall = wall;
         Startup = startup;
@@ -51,7 +55,8 @@ internal sealed class SmtLiveMeasured
 
         var description = $"1 machine: {Text(machine, "platform")}, {Integer(machine, "cores")} cores, {Integer(machine, "memory_bytes") / (1024.0 * 1024 * 1024):0.0} GiB; " +
                           $"{Integer(degree, "sessions")} session(s) at once ({Text(degree, "decided_by")})";
-        return new SmtLiveMeasured(Integer(Object(root, "problem_set"), "taken"), Number(seconds, "wall"), Number(seconds, "startup"), parts, description);
+        var set = Object(root, "problem_set");
+        return new SmtLiveMeasured(Text(set, "sha256"), "", Integer(set, "taken"), Number(seconds, "wall"), Number(seconds, "startup"), parts, description);
     }
 
     /// <summary>
@@ -84,7 +89,8 @@ internal sealed class SmtLiveMeasured
                 parts.Add(("of the job: run", ran));
         }
 
-        return new SmtLiveMeasured(Integer(Object(root, "problem_set"), "taken"), Number(seconds, "wall"), null, parts, description);
+        var set = Object(root, "problem_set");
+        return new SmtLiveMeasured(Text(set, "sha256"), Text(root, "status"), Integer(set, "taken"), Number(seconds, "wall"), null, parts, description);
     }
 
     /// <summary>Whether a folder holds a measurement of the side asked for.</summary>
@@ -147,6 +153,12 @@ internal sealed class SmtLiveMeasured
     #endregion
 
     #region Properties
+
+    /// <summary>The SHA-256 of the set the run measured.</summary>
+    public string SetSha256 { get; }
+
+    /// <summary>How a fleet run's job ended (<c>Completed</c>, ...); empty for a local run.</summary>
+    public string Status { get; }
 
     /// <summary>The problems the run took.</summary>
     public long Taken { get; }

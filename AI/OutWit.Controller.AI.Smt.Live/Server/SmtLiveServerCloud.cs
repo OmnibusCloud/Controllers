@@ -15,6 +15,13 @@ internal sealed class SmtLiveServerCloud : ISmtLiveServer, IAsyncDisposable
     /// <summary>How often the status of a job is asked for: the error of a job's time as the tool measures it.</summary>
     public static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// How long a job's status may not be read before the tool stops waiting for it (the job goes
+    /// on on the server): a connection that drops for some minutes during an hour's run is waited
+    /// out.
+    /// </summary>
+    public static readonly TimeSpan POLL_TOLERANCE = TimeSpan.FromMinutes(10);
+
     #endregion
 
     #region Fields
@@ -77,7 +84,14 @@ internal sealed class SmtLiveServerCloud : ISmtLiveServer, IAsyncDisposable
     public async Task<ISmtLiveJob> SubmitAsync(string script, IReadOnlyList<object?> parameters, CancellationToken ct)
     {
         var handle = await m_client.Scripts.SubmitAsync(script, parameters, ct: ct);
-        return new SmtLiveJobCloud(handle, POLL_INTERVAL, m_output);
+        return new SmtLiveJobCloud(m_client.Jobs, handle.JobId, script, POLL_INTERVAL, POLL_TOLERANCE, m_output);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ISmtLiveJob> OpenAsync(Guid id, CancellationToken ct)
+    {
+        var job = await m_client.Jobs.GetStatusAsync(id, ct);
+        return new SmtLiveJobCloud(m_client.Jobs, id, job.ScriptName ?? "", POLL_INTERVAL, POLL_TOLERANCE, m_output);
     }
 
     /// <inheritdoc/>

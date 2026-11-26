@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Security.Cryptography;
 using OutWit.Controller.AI.Smt.Live.Server;
@@ -12,6 +13,16 @@ namespace OutWit.Controller.AI.Smt.Live.Commands;
 /// </summary>
 internal static class SmtLiveInput
 {
+    #region Constants
+
+    private const int READ_BUFFER_BYTES = 128 * 1024;
+    private const byte LINE_FEED = 0x0A;
+    private const byte CARRIAGE_RETURN = 0x0D;
+
+    private static readonly byte[] BYTE_ORDER_MARK = [0xEF, 0xBB, 0xBF];
+
+    #endregion
+
     #region Functions
 
     /// <summary>
@@ -33,27 +44,58 @@ internal static class SmtLiveInput
     }
 
     /// <summary>
-    /// Counts a problem set's rows (lines that are not blank, as its reader counts them) and
-    /// hashes its bytes, reading it as a stream.
+    /// Counts a problem set's rows as the model package's reader counts them and hashes its
+    /// bytes, in one pass over the file: a line ends at a line feed (a carriage return before it
+    /// is part of the line end, one anywhere else part of the line), a line of nothing but
+    /// spaces, tabs and carriage returns is blank and not a row, and a byte order mark before
+    /// the first line is not part of it. Any other line is a row, taken or refused, so the count
+    /// is the one the server reads.
     /// </summary>
     /// <param name="path">The problem set.</param>
     /// <param name="ct">Cancels the reading.</param>
     /// <returns>The rows, the bytes and the SHA-256 in lower-case hex.</returns>
     public static async Task<(int Rows, long Bytes, string Sha256)> DescribeAsync(string path, CancellationToken ct)
     {
-        var rows = 0;
-        using (var reader = new StreamReader(path))
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = ArrayPool<byte>.Shared.Rent(READ_BUFFER_BYTES);
+        try
         {
-            while (await reader.ReadLineAsync(ct) is { } line)
+            await using var stream = File.OpenRead(path);
+            var rows = 0;
+            var bytes = 0L;
+            var filled = false;
+            var start = true;
+            int read;
+            while ((read = await stream.ReadAsync(buffer.AsMemory(0, READ_BUFFER_BYTES), ct)) > 0)
             {
-                if (!string.IsNullOrWhiteSpace(line))
-                    rows++;
-            }
-        }
+                hash.AppendData(buffer, 0, read);
+                var from = 0;
+                if (start && read >= BYTE_ORDER_MARK.Length && buffer.AsSpan(0, BYTE_ORDER_MARK.Length).SequenceEqual(BYTE_ORDER_MARK))
+                    from = BYTE_ORDER_MARK.Length;
 
-        await using var stream = File.OpenRead(path);
-        var hash = await SHA256.HashDataAsync(stream, ct);
-        return (rows, stream.Length, Convert.ToHexStringLower(hash));
+                start = false;
+                bytes += read;
+                foreach (var value in buffer.AsSpan(from, read - from))
+                {
+                    if (value == LINE_FEED)
+                    {
+                        rows += filled ? 1 : 0;
+                        filled = false;
+                    }
+                    else if (value is not ((byte)' ' or (byte)'\t' or CARRIAGE_RETURN))
+                    {
+                        filled = true;
+                    }
+                }
+            }
+
+            rows += filled ? 1 : 0;
+            return (rows, bytes, Convert.ToHexStringLower(hash.GetHashAndReset()));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     /// <summary>

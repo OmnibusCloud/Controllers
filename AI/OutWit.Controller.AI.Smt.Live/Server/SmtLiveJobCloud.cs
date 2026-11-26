@@ -1,11 +1,12 @@
 using OutWit.Cloud.Data.Processing;
-using OutWit.Cloud.SDK;
+using OutWit.Cloud.SDK.Jobs;
 
 namespace OutWit.Controller.AI.Smt.Live.Server;
 
 /// <summary>
 /// A job on a real server. Its status is polled until it ends; a poll that fails (a connection
-/// that drops for a moment during a long run) is tried again a few times before the tool gives
+/// that drops during a long run) is tried again at every interval while the failures have lasted
+/// less than the tolerance, which is minutes, not a number of polls: only then does the tool give
 /// up waiting, which leaves the job running on the server. A variable's value is asked for a few
 /// times too: the server may mark a job completed a moment before its last value can be read.
 /// </summary>
@@ -13,18 +14,19 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
 {
     #region Constants
 
-    /// <summary>The polls in a row that may fail before the waiting ends.</summary>
-    private const int MAX_POLL_FAILURES = 5;
-
     /// <summary>The tries of reading one variable.</summary>
     private const int RESULT_ATTEMPTS = 3;
+
+    /// <summary>How often a status that still cannot be read is said again.</summary>
+    private static readonly TimeSpan SAY_AGAIN = TimeSpan.FromMinutes(1);
 
     #endregion
 
     #region Fields
 
-    private readonly WitJobHandle m_handle;
+    private readonly IWitCloudJobs m_jobs;
     private readonly TimeSpan m_interval;
+    private readonly TimeSpan m_tolerance;
     private readonly TextWriter m_output;
 
     #endregion
@@ -32,15 +34,21 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
     #region Constructors
 
     /// <summary>
-    /// Wraps a submitted job.
+    /// Wraps a job.
     /// </summary>
-    /// <param name="handle">The SDK's handle of the job.</param>
+    /// <param name="jobs">The SDK's jobs of the signed-in client.</param>
+    /// <param name="id">The job's id.</param>
+    /// <param name="script">The name of the script it runs.</param>
     /// <param name="interval">How often its status is asked for.</param>
+    /// <param name="tolerance">How long its status may not be read before the waiting ends.</param>
     /// <param name="output">Where a failed poll is said.</param>
-    public SmtLiveJobCloud(WitJobHandle handle, TimeSpan interval, TextWriter output)
+    public SmtLiveJobCloud(IWitCloudJobs jobs, Guid id, string script, TimeSpan interval, TimeSpan tolerance, TextWriter output)
     {
-        m_handle = handle;
+        m_jobs = jobs;
+        Id = id;
+        Script = script;
         m_interval = interval;
+        m_tolerance = tolerance;
         m_output = output;
     }
 
@@ -52,7 +60,8 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
     public async Task<SmtLiveJobEnd> WaitAsync(IProgress<double>? progress, CancellationToken ct)
     {
         var started = DateTime.UtcNow;
-        var failures = 0;
+        DateTime? lost = null;
+        var said = DateTime.MinValue;
 
         while (true)
         {
@@ -61,16 +70,25 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
             ProcessingJobInfo job;
             try
             {
-                job = await m_handle.GetStatusAsync(ct);
-                failures = 0;
+                job = await m_jobs.GetStatusAsync(Id, ct);
+                if (lost is { } since)
+                    m_output.WriteLine($"  the job's status is read again, after {DateTime.UtcNow - since:hh\\:mm\\:ss}");
+
+                lost = null;
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                failures++;
-                if (failures >= MAX_POLL_FAILURES)
+                var now = DateTime.UtcNow;
+                lost ??= now;
+                if (now - lost.Value >= m_tolerance)
                     throw;
 
-                m_output.WriteLine($"  the job's status could not be read ({failures} of {MAX_POLL_FAILURES} tries): {exception.Message}");
+                if (now - said >= SAY_AGAIN)
+                {
+                    m_output.WriteLine($"  the job's status could not be read for {now - lost.Value:hh\\:mm\\:ss}; the tool asks again for up to {m_tolerance.TotalMinutes:0.#} minute(s): {exception.Message}");
+                    said = now;
+                }
+
                 continue;
             }
 
@@ -88,7 +106,7 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
         {
             try
             {
-                return await m_handle.GetResultAsync<T>(variable, ct);
+                return await m_jobs.GetResultAsync<T>(Id, variable, ct);
             }
             catch (Exception exception) when (exception is not OperationCanceledException && attempt < RESULT_ATTEMPTS)
             {
@@ -112,7 +130,10 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
     #region Properties
 
     /// <inheritdoc/>
-    public Guid Id => m_handle.JobId;
+    public Guid Id { get; }
+
+    /// <inheritdoc/>
+    public string Script { get; }
 
     #endregion
 }

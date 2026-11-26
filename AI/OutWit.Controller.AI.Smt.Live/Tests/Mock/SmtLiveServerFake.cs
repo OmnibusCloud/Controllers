@@ -5,7 +5,8 @@ namespace OutWit.Controller.AI.Smt.Live.Tests.Mock;
 
 /// <summary>
 /// A server in memory: blobs are byte arrays by id, a submitted script is recorded and answered
-/// by the job the test makes for it.
+/// by the job the test makes for it, a job is opened by its id from the jobs the test puts
+/// there, and a blob the test names fails its download.
 /// </summary>
 internal sealed class SmtLiveServerFake : ISmtLiveServer
 {
@@ -51,11 +52,23 @@ internal sealed class SmtLiveServerFake : ISmtLiveServer
     public Task<ISmtLiveJob> SubmitAsync(string script, IReadOnlyList<object?> parameters, CancellationToken ct)
     {
         Submitted.Add((script, parameters));
-        return Task.FromResult<ISmtLiveJob>(Jobs(script, parameters));
+        var job = Jobs(script, parameters);
+        job.Script = script;
+        return Task.FromResult<ISmtLiveJob>(job);
+    }
+
+    public Task<ISmtLiveJob> OpenAsync(Guid id, CancellationToken ct)
+    {
+        return Existing.TryGetValue(id, out var job)
+            ? Task.FromResult<ISmtLiveJob>(job)
+            : Task.FromException<ISmtLiveJob>(new InvalidOperationException($"Job {id} not found"));
     }
 
     public async Task DownloadAsync(Guid blob, string path, IProgress<WitTransferProgress>? progress, CancellationToken ct)
     {
+        if (Failing.Contains(blob))
+            throw new IOException("the connection was reset");
+
         await File.WriteAllBytesAsync(path, m_blobs[blob], ct);
         progress?.Report(new WitTransferProgress(m_blobs[blob].Length, m_blobs[blob].Length));
     }
@@ -66,6 +79,12 @@ internal sealed class SmtLiveServerFake : ISmtLiveServer
 
     /// <summary>Makes the job of a submitted script.</summary>
     public Func<string, IReadOnlyList<object?>, SmtLiveJobFake> Jobs { get; set; } = (script, _) => throw new InvalidOperationException($"no job for {script}");
+
+    /// <summary>The jobs a job id opens.</summary>
+    public Dictionary<Guid, SmtLiveJobFake> Existing { get; } = [];
+
+    /// <summary>The blobs whose download fails.</summary>
+    public HashSet<Guid> Failing { get; } = [];
 
     /// <summary>The scripts submitted, with their parameters.</summary>
     public List<(string Script, IReadOnlyList<object?> Parameters)> Submitted { get; } = [];

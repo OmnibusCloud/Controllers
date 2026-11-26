@@ -16,8 +16,8 @@ namespace OutWit.Controller.AI.Smt.Live.Comparative;
 /// </list>
 /// With <c>T(n) = fixed + n x cost</c> on each side, the fleet finishes first where
 /// <c>T_local(n) &gt; T_fleet(n)</c>. A crossover above the most rows a set may have
-/// (<see cref="SmtProblemSetLimits.MAX_ROWS"/>) is a size no run can have: this machine finishes
-/// first at every size.
+/// (<see cref="SmtProblemSetLimits.MAX_ROWS"/>) is a size no run can have: the side that is first
+/// below it is first at every size a set may have.
 /// </summary>
 /// <param name="Kind">What the lines say.</param>
 /// <param name="Problems">The crossover in problems, where there is one.</param>
@@ -80,7 +80,12 @@ internal sealed record SmtLiveCrossover(SmtLiveCrossoverKind Kind, double? Probl
         }
 
         if (saved < 0 && head > 0)
-            return new SmtLiveCrossover(SmtLiveCrossoverKind.FleetBelow, head / -saved, localFixed, localCost, fleetFixed, fleetCost, "");
+        {
+            var crossover = head / -saved;
+            return crossover > SmtProblemSetLimits.MAX_ROWS
+                ? new SmtLiveCrossover(SmtLiveCrossoverKind.FleetAlways, crossover, localFixed, localCost, fleetFixed, fleetCost, "")
+                : new SmtLiveCrossover(SmtLiveCrossoverKind.FleetBelow, crossover, localFixed, localCost, fleetFixed, fleetCost, "");
+        }
 
         return head > 0
             ? new SmtLiveCrossover(SmtLiveCrossoverKind.FleetAlways, null, localFixed, localCost, fleetFixed, fleetCost, "")

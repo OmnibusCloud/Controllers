@@ -9,7 +9,8 @@ namespace OutWit.Controller.AI.Smt.Live.Commands;
 /// work was placed (all but how many machines answered, whether they agreed and how the answer
 /// was settled): the status, the verdict, the models, the values, the validation, the digest,
 /// the stats. And the provenance must be the same: the profile, the module, the engine, the
-/// controller, the options and the set. Every difference is printed; any makes the exit code 1.
+/// controller, the options and the set. Every difference is printed; any makes the exit code
+/// <see cref="SmtLiveExitCodes.DIFFER"/>.
 /// The results are read a row at a time, both files side by side.
 /// </summary>
 internal sealed class SmtLiveCompare
@@ -51,7 +52,7 @@ internal sealed class SmtLiveCompare
     /// </summary>
     /// <param name="left">The folder of one run.</param>
     /// <param name="right">The folder of the other.</param>
-    /// <returns>The exit code: 0 when they are the same, 1 when they differ, 2 when a document is not there.</returns>
+    /// <returns>The exit code: 0 when they are the same, 4 when they differ, 2 when a document is not there.</returns>
     public int Run(string left, string right)
     {
         foreach (var folder in new[] { left, right })
@@ -78,7 +79,7 @@ internal sealed class SmtLiveCompare
         }
 
         m_output.WriteLine($"{SmtLiveRunSummary.LOUD}result   : THE RUNS DIFFER: {differing} of {rows} row(s){(provenance ? "" : ", and the provenance")}");
-        return SmtLiveExitCodes.FAILED;
+        return SmtLiveExitCodes.DIFFER;
     }
 
     private (int Rows, int Differing) CompareRows(string leftPath, string rightPath)
@@ -128,6 +129,10 @@ internal sealed class SmtLiveCompare
         {
             using var a = JsonDocument.Parse(left);
             using var b = JsonDocument.Parse(right);
+
+            // A row of the results is one object; JSON of another kind is a difference, not a crash.
+            if (a.RootElement.ValueKind != JsonValueKind.Object || b.RootElement.ValueKind != JsonValueKind.Object)
+                return $"row {place}: not a JSON object in one of the runs";
 
             var differences = new List<string>();
             var names = a.RootElement.EnumerateObject().Select(member => member.Name)
