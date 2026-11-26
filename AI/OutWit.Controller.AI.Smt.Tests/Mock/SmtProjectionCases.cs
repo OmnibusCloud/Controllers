@@ -55,9 +55,9 @@ internal static class SmtProjectionCases
             cases.Add(new SmtProjectionCase(id, text, maxModels, project, words));
         }
 
-        void Stop(string id, string text, string sort, params string[] project)
+        void Stop(string id, string text, string sort, int models, params string[] project)
         {
-            cases.Add(new SmtProjectionCase(id, text, 3, project, "") { Declared = sort });
+            cases.Add(new SmtProjectionCase(id, text, 3, project, $"ok sat other {models} incomplete") { Declared = sort });
         }
 
         // The core and the numbers.
@@ -127,32 +127,32 @@ internal static class SmtProjectionCases
         Take("uninterpreted-for-a-parameter-an-alias-drops", U + "(define-sort K (T) Int)(declare-const x (K U))(assert (and (>= x 0) (<= x 1)))", 5, "ok sat 2 complete", "x");
 
         // The declared sort itself, however it is named: the first model's value is not taken back.
-        Stop("uninterpreted", "(set-logic QF_UF)" + U + "(declare-const x U)(declare-const y U)(assert (distinct x y))", "U", "x");
-        Stop("uninterpreted-declare-fun", U + "(declare-fun x () U)(declare-fun y () U)(assert (distinct x y))", "U", "x");
-        Stop("uninterpreted-with-arguments", "(declare-sort P 1)(declare-const x (P Int))(declare-const y (P Int))(assert (distinct x y))", "P", "x");
-        Stop("uninterpreted-quoted-name", "(declare-sort |my sort| 0)(declare-const x |my sort|)(declare-const y |my sort|)(assert (distinct x y))", "my sort", "x");
-        Stop("uninterpreted-by-an-alias", U + "(define-sort V () U)(declare-const x V)(declare-const y V)(assert (distinct x y))", "U", "x");
-        Stop("uninterpreted-by-an-alias-parameter", U + "(define-sort Id (T) T)(declare-const x (Id U))(declare-const y (Id U))(assert (distinct x y))", "U", "x");
-        Stop("uninterpreted-of-one-element", U + "(declare-const x U)(assert (forall ((y U)) (= x y)))", "U", "x");
+        Stop("uninterpreted", "(set-logic QF_UF)" + U + "(declare-const x U)(declare-const y U)(assert (distinct x y))", "U", 1, "x");
+        Stop("uninterpreted-declare-fun", U + "(declare-fun x () U)(declare-fun y () U)(assert (distinct x y))", "U", 1, "x");
+        Stop("uninterpreted-with-arguments", "(declare-sort P 1)(declare-const x (P Int))(declare-const y (P Int))(assert (distinct x y))", "P", 1, "x");
+        Stop("uninterpreted-quoted-name", "(declare-sort |my sort| 0)(declare-const x |my sort|)(declare-const y |my sort|)(assert (distinct x y))", "my sort", 1, "x");
+        Stop("uninterpreted-by-an-alias", U + "(define-sort V () U)(declare-const x V)(declare-const y V)(assert (distinct x y))", "U", 1, "x");
+        Stop("uninterpreted-by-an-alias-parameter", U + "(define-sort Id (T) T)(declare-const x (Id U))(declare-const y (Id U))(assert (distinct x y))", "U", 1, "x");
+        Stop("uninterpreted-of-one-element", U + "(declare-const x U)(assert (forall ((y U)) (= x y)))", "U", 1, "x");
 
         // Sorts of the theories over it.
-        Stop("uninterpreted-array-index", U + "(declare-const a (Array U Int))(declare-const x U)(assert (= (select a x) 1))", "U", "a");
-        Stop("uninterpreted-array-element", U + "(declare-const a (Array Int U))", "U", "a");
-        Stop("uninterpreted-sequence", U + "(declare-const q (Seq U))(assert (= (seq.len q) 1))", "U", "q");
-        Stop("uninterpreted-array-of-sequences", U + "(declare-const a (Array Int (Seq U)))(assert (= (seq.len (select a 0)) 1))", "U", "a");
-        Stop("uninterpreted-function-sort", U + "(declare-const h (-> Int U))", "U", "h");
-        Stop("uninterpreted-set", U + "(declare-const s (Set U))(declare-const e U)(assert (select s e))", "U", "s");
+        Stop("uninterpreted-array-index", U + "(declare-const a (Array U Int))(declare-const x U)(assert (= (select a x) 1))", "U", 2, "a");
+        Stop("uninterpreted-array-element", U + "(declare-const a (Array Int U))", "U", 1, "a");
+        Stop("uninterpreted-sequence", U + "(declare-const q (Seq U))(assert (= (seq.len q) 1))", "U", 1, "q");
+        Stop("uninterpreted-array-of-sequences", U + "(declare-const a (Array Int (Seq U)))(assert (= (seq.len (select a 0)) 1))", "U", 1, "a");
+        Stop("uninterpreted-function-sort", U + "(declare-const h (-> Int U))", "U", 1, "h");
+        Stop("uninterpreted-set", U + "(declare-const s (Set U))(declare-const e U)(assert (select s e))", "U", 2, "s");
 
         // Datatypes with a field of it, directly, by a parameter, by another datatype.
-        Stop("uninterpreted-field", U + "(declare-datatype D ((mk (u U) (n Int))))(declare-const d D)(assert (= (n d) 1))", "U", "d");
-        Stop("uninterpreted-option", U + OPTION + "(declare-const o (Opt U))", "U", "o");
-        Stop("uninterpreted-pair", U + PAIR + "(declare-const p (Pr U Int))(assert (= (snd p) 1))", "U", "p");
-        Stop("uninterpreted-list-of-records", U + "(declare-datatype D ((mk (u U))))" + LIST + "(declare-const l (Lst D))(assert (not (= l (as nl (Lst D)))))", "U", "l");
-        Stop("uninterpreted-mutual", U + "(declare-datatypes ((T 0) (F 0)) (((leaf) (node (kids F))) ((none) (more (first U) (rest F)))))(declare-const t T)(assert (not (= t leaf)))(assert (not (= (kids t) none)))", "U", "t");
-        Stop("uninterpreted-under-a-parameter-of-its-name", U + "(declare-datatype Box (par (U) ((box (get U)))))(declare-const b (Box Bool))", "U", "b");
+        Stop("uninterpreted-field", U + "(declare-datatype D ((mk (u U) (n Int))))(declare-const d D)(assert (= (n d) 1))", "U", 1, "d");
+        Stop("uninterpreted-option", U + OPTION + "(declare-const o (Opt U))", "U", 1, "o");
+        Stop("uninterpreted-pair", U + PAIR + "(declare-const p (Pr U Int))(assert (= (snd p) 1))", "U", 1, "p");
+        Stop("uninterpreted-list-of-records", U + "(declare-datatype D ((mk (u U))))" + LIST + "(declare-const l (Lst D))(assert (not (= l (as nl (Lst D)))))", "U", 1, "l");
+        Stop("uninterpreted-mutual", U + "(declare-datatypes ((T 0) (F 0)) (((leaf) (node (kids F))) ((none) (more (first U) (rest F)))))(declare-const t T)(assert (not (= t leaf)))(assert (not (= (kids t) none)))", "U", 1, "t");
+        Stop("uninterpreted-under-a-parameter-of-its-name", U + "(declare-datatype Box (par (U) ((box (get U)))))(declare-const b (Box Bool))", "U", 1, "b");
 
         // Beside a constant whose values are read back: the model is ruled out as a whole or not at all.
-        Stop("uninterpreted-second-entry", U + "(declare-const n Int)(declare-const x U)(assert (and (>= n 0) (<= n 1)))", "U", "n", "x");
+        Stop("uninterpreted-second-entry", U + "(declare-const n Int)(declare-const x U)(assert (and (>= n 0) (<= n 1)))", "U", 1, "n", "x");
 
         return cases;
     }

@@ -12,9 +12,9 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 /// <param name="MaxModels">The most models to look for.</param>
 /// <param name="Project">The constants the models are told apart by.</param>
 /// <param name="Words">
-/// What the real solver's outcome says in a few words (<see cref="SmtSolved.Words"/>) for an
-/// enumeration whose values the solver reads back; empty for one that ends at a value it does
-/// not (<see cref="Declared"/>), which is held to what such an end is, not to a number of models.
+/// What the real solver's outcome says in a few words (<see cref="SmtSolved.Words"/>): for an
+/// enumeration that ends at a value the solver does not take back (<see cref="Declared"/>), an
+/// answer with the models found until then, not complete, for the reason <c>other</c>.
 /// </param>
 internal sealed record SmtProjectionCase(string Id, string Text, int MaxModels, IReadOnlyList<string> Project, string Words)
 {

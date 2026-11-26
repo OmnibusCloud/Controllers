@@ -127,7 +127,8 @@ public sealed class SmtSolverProjectionTests
         TestContext.Out.WriteLine($"{one.Id}: {solved.Words()} | {solved.ReasonText} | {string.Join(" | ", solved.Values.Select(OnOneLine))}");
         Assert.Multiple(() =>
         {
-            Assert.That(solved.Status, Is.EqualTo(SmtResultWords.OK), solved.ToString());
+            Assert.That(solved.Words(), Is.EqualTo(one.Words), solved.ToString());
+            Assert.That(solved.Status, Is.EqualTo(SmtResultWords.OK));
             Assert.That(solved.Verdict, Is.EqualTo(SmtResultWords.SAT));
             Assert.That(solved.Reason, Is.EqualTo(SmtResultWords.OTHER));
             Assert.That(solved.Message, Is.Empty, "the problem is well formed: this is no error of its author's");
