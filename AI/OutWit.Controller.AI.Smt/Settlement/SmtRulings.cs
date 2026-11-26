@@ -132,12 +132,11 @@ internal static class SmtRulings
         var answers = main.Answers(index);
         var again = repair?.Answers(index) ?? [];
         if (repair == null || again.Count == 0)
-            return new SmtFirstAnswers(answers, main, TwoMachines(answers), answers.Count > 0 && IsSurplus(main, index), false);
+            return new SmtFirstAnswers(answers, main, TwoMachines(answers), answers.Count > 0 && IsSurplus(main, index));
 
         return new SmtFirstAnswers([.. answers, .. again], repair,
             TwoMachines(answers) || TwoMachines(again),
-            (answers.Count > 0 && IsSurplus(main, index)) || IsSurplus(repair, index),
-            true);
+            (answers.Count > 0 && IsSurplus(main, index)) || IsSurplus(repair, index));
     }
 
     /// <summary>Why the answers a problem is first ruled on cannot settle it, or null when they can.</summary>
@@ -198,10 +197,10 @@ internal static class SmtRulings
         if (cause == null)
         {
             var answer = first.Answers[0];
-            return SmtRuling.Accept(index, answer, check(answer), first.Answers.Count, agreed: true, first.TwoMachines ? SmtRunWords.COPIES : SmtRunWords.ONE_COPY, first.Repaired);
+            return SmtRuling.Accept(index, answer, check(answer), first.Answers.Count, agreed: true, first.TwoMachines ? SmtRunWords.COPIES : SmtRunWords.ONE_COPY);
         }
 
-        return Settle(index, cause, first.Answers, dispute, borrowable, check, first.Repaired);
+        return Settle(index, cause, first.Answers, dispute, borrowable, check);
     }
 
     #endregion
@@ -220,14 +219,14 @@ internal static class SmtRulings
     }
 
     private static SmtRuling Settle(int index, string cause, List<SmtCopy> first, SmtRound? dispute, IReadOnlyDictionary<string, int> borrowable,
-        Func<SmtCopy, SmtModelCheck> check, bool repaired)
+        Func<SmtCopy, SmtModelCheck> check)
     {
         if (dispute == null || !dispute.UnitOf.TryGetValue(index, out var unit))
-            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, 0, 0, SmtRunWords.TOO_FEW_COPIES), first.Count, repaired);
+            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, 0, 0, SmtRunWords.TOO_FEW_COPIES), first.Count);
 
         var votes = dispute.Answers(index);
         if (votes.Count < MAJORITY)
-            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, votes.Count, SmtRunWords.TOO_FEW_COPIES), first.Count + votes.Count, repaired);
+            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, votes.Count, SmtRunWords.TOO_FEW_COPIES), first.Count + votes.Count);
 
         // The copies that give one digest, the largest group first; ties in an order of the digests.
         var groups = votes
@@ -242,7 +241,7 @@ internal static class SmtRulings
         var next = groups.Count > 1 ? groups[1].Count : 0;
 
         if (most < MAJORITY || most <= next)
-            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.NO_MAJORITY), first.Count + votes.Count, repaired);
+            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.NO_MAJORITY), first.Count + votes.Count);
 
         // Two machines must have given the leading digest. Its bound answers are as many machines;
         // of its unbound ones, as many as the other packages of the round are short of may be one
@@ -250,7 +249,7 @@ internal static class SmtRulings
         var bound = groups[0].Count(vote => vote.Bound);
         var machines = bound + Math.Max(0, most - bound - borrowable.GetValueOrDefault(unit.Ticket));
         if (machines < MAJORITY || machines <= next)
-            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.SURPLUS_COPIES), first.Count + votes.Count, repaired);
+            return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.SURPLUS_COPIES), first.Count + votes.Count);
 
         var leader = groups[0][0];
         var copies = first.Count + votes.Count;
@@ -264,7 +263,7 @@ internal static class SmtRulings
         var settledBy = leaderCheck.IsFailed ? SmtRunWords.AGREEMENT : SmtRunWords.DISPUTE;
         var lies = leaderCheck.IsFailed ? 0 : differing;
 
-        return SmtRuling.Accept(index, leader, leaderCheck, copies, differing == 0, settledBy, repaired,
+        return SmtRuling.Accept(index, leader, leaderCheck, copies, differing == 0, settledBy,
             new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.RESOLVED), lies);
     }
 

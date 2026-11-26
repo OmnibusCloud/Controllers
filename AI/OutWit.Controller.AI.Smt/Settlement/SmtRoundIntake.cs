@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using OutWit.Controller.AI.Smt.Delivery;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Engine.Interfaces;
@@ -190,10 +191,9 @@ internal static class SmtRoundIntake
             if (bounds == null || !string.Equals(bounds.Ticket, unit.Ticket, StringComparison.Ordinal))
                 bounds = await SmtTaskBounds.LoadAsync(unit, blobs);
 
-            var (accepted, reason) = ReadPackage(unit, reference, path, bounds, spool, bound != null);
-            if (accepted == null)
+            if (!TryReadPackage(unit, path, bounds, spool, bound != null, out var accepted, out var reason))
             {
-                Reject(round, unit.Ticket, reason!);
+                Reject(round, unit.Ticket, reason);
                 continue;
             }
 
@@ -283,23 +283,27 @@ internal static class SmtRoundIntake
     /// read, a row at a time, and stay there only when the whole package holds: a package that is
     /// refused, at whichever row, leaves the spool as long as it was before it.
     /// </summary>
-    private static (SmtAcceptedPackage? Accepted, string? Reason) ReadPackage(SmtTaskPackageData unit, SmtResultPackageData reference, string path, SmtTaskBounds bounds, SmtSpool? spool,
-        bool bound)
+    private static bool TryReadPackage(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, bool bound,
+        [NotNullWhen(true)] out SmtAcceptedPackage? accepted, [NotNullWhen(false)] out string? reason)
     {
+        accepted = null;
         var copies = new List<SmtCopy>(unit.ProblemCount);
         var mark = spool?.Length ?? 0;
 
-        var reason = ReadRows(unit, path, bounds, spool, copies, bound);
+        reason = ReadRows(unit, path, bounds, spool, copies, bound);
 
         // Exactly the package's problems: none missing, none of another package, none twice.
         if (reason == null && (copies.Count != unit.ProblemCount || !string.Equals(SmtTickets.IndexDigest(copies.Select(copy => copy.Index)), unit.IndexDigest, StringComparison.Ordinal)))
             reason = CONTENT;
 
         if (reason == null)
-            return (new SmtAcceptedPackage(unit, reference.Sha256, copies, bound), null);
+        {
+            accepted = new SmtAcceptedPackage(unit, copies, bound);
+            return true;
+        }
 
         spool?.Rewind(mark);
-        return (null, reason);
+        return false;
     }
 
     /// <summary>

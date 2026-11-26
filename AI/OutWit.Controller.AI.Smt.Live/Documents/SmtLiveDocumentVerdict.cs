@@ -7,6 +7,10 @@ namespace OutWit.Controller.AI.Smt.Live.Documents;
 /// <param name="Errors">The first faults, each with its line (for JSON lines) and its JSON path.</param>
 internal sealed record SmtLiveDocumentVerdict(int Items, long Bytes, int Faulty, IReadOnlyList<string> Errors)
 {
+    #region Properties
+
     /// <summary>Whether the file holds to its schema.</summary>
     public bool IsValid => Faulty == 0 && Errors.Count == 0;
+
+    #endregion
 }
