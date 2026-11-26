@@ -141,7 +141,9 @@ report it carry references only. `Smt.SolvePackage` is given an `SmtTaskPackageD
    version the job runs on is this node's, the ticket is 32 lower-case hex characters, there is
    a blob, there are options, 1 to 256 problems, a blob of at most 257 MiB;
 2. downloads the blob over the node's blob channel (in chunks, resumed after a break, tried again
-   for about five minutes; a few downloads of a share at once, the first transfer of all alone);
+   for about five minutes; a few downloads of a share at once, the first transfer of all alone;
+   an attempt that runs out of its time cannot be stopped, so it is waited for half a minute more
+   before another is made, and what it comes to in that time is taken);
 3. holds the blob to its reference: its size, its SHA-256, and that it holds exactly the problems
    the reference names (their number and the digest of their indices);
 4. waits for its turn on the node's budget of sessions (below), then makes the process's
