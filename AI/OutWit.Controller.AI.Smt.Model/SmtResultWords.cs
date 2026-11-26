@@ -51,7 +51,10 @@ public static class SmtResultWords
     /// <summary>Reason: the solver's procedure is not complete for the problem, by its own word.</summary>
     public const string INCOMPLETE = "incomplete";
 
-    /// <summary>Reason: any other word of the solver's (<see cref="SmtResultData.ReasonText"/> keeps it).</summary>
+    /// <summary>
+    /// Reason: any other word of the solver's (<see cref="SmtResultData.ReasonText"/> keeps it); also of an enumeration that
+    /// ended, its models kept, because the solver did not take a found model's values back.
+    /// </summary>
     public const string OTHER = "other";
 
     /// <summary>Proof: the problem with the negated goal is unsatisfiable.</summary>

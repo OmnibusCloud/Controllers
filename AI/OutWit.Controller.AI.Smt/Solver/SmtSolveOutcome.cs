@@ -56,7 +56,11 @@ internal sealed class SmtSolveOutcome
     /// <summary>Why a check has no verdict, or why an enumeration stopped before it was complete (none when it stopped at its number of models).</summary>
     public SmtUnknownReason Reason { get; init; }
 
-    /// <summary>The solver's own word for an <c>unknown</c>, as it answered <c>(get-info :reason-unknown)</c>; empty when it was not asked.</summary>
+    /// <summary>
+    /// The solver's own word for an <c>unknown</c>, as it answered <c>(get-info :reason-unknown)</c>;
+    /// for an enumeration that ended because the solver did not take a found model's values back,
+    /// what it said to that; empty when there is neither.
+    /// </summary>
     public string ReasonText { get; init; } = "";
 
     /// <summary>The models an enumeration found; 0 for the other queries.</summary>

@@ -90,6 +90,13 @@ public static class SmtRefusalCodes
     /// <summary>An enumeration is projected on a name the problem does not declare as a constant.</summary>
     public const string UNKNOWN_CONSTANT = "unknown_constant";
 
+    /// <summary>
+    /// An enumeration is projected on a constant whose values the solver cannot be told back:
+    /// they hold elements of a sort the problem only declares (<c>declare-sort</c>), which the
+    /// solver names by names of its own that it takes in no later command.
+    /// </summary>
+    public const string PROJECT_SORT_UNSUPPORTED = "project_sort_unsupported";
+
     /// <summary>A problem set has more rows than a set may have; reading ended at this row.</summary>
     public const string TOO_MANY_PROBLEMS = "too_many_problems";
 
@@ -98,7 +105,8 @@ public static class SmtRefusalCodes
         SYNTAX_ERROR, TEXT_TOO_LONG, TOO_MANY_TOKENS, NESTING_TOO_DEEP, NUMERAL_TOO_LONG, LITERAL_TOO_WIDE, STRING_TOO_LONG,
         NOT_A_COMMAND, COMMAND_NOT_ALLOWED, COMMAND_AFTER_END, COMMAND_MALFORMED, RESERVED_SYMBOL, AMBIGUOUS_TOKEN, NON_ASCII_STRING,
         INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM, BUILTIN_NAME,
-        ROW_MALFORMED, ROW_TOO_LONG, ID_INVALID, ID_DUPLICATE, FIELD_MISSING, FIELD_INVALID, FIELD_NOT_ALLOWED, UNKNOWN_CONSTANT, TOO_MANY_PROBLEMS
+        ROW_MALFORMED, ROW_TOO_LONG, ID_INVALID, ID_DUPLICATE, FIELD_MISSING, FIELD_INVALID, FIELD_NOT_ALLOWED, UNKNOWN_CONSTANT, PROJECT_SORT_UNSUPPORTED,
+        TOO_MANY_PROBLEMS
     };
 
     #endregion

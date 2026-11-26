@@ -172,7 +172,7 @@ public sealed class SmtRowChecksTests
         // What only an answered enumeration says.
         yield return Words("a complete check", "check-unsat", row => row.Complete = true);
         yield return Words("a proof at its limit", "prove-counterexample", row => row.LimitReached = true);
-        yield return Words("a complete enumeration that ended in an error", "enumerate-error-in-the-block", row => row.Complete = true);
+        yield return Words("a complete enumeration that ended in an error", "enumerate-error-in-the-second-values", row => row.Complete = true);
         yield return Words("an enumeration at its limit that ended in a fault", "enumerate-backstop-with-a-model", row => row.LimitReached = true);
         yield return Words("a complete enumeration whose output passed its cap", "enumerate-output-with-a-model", row => row.Complete = true);
         yield return Words("an output past its cap with models and no verdict", "enumerate-output-with-a-model", row => row.Verdict = SmtResultWords.NONE);

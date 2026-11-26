@@ -34,7 +34,7 @@
       "maxItems": 256,
       "uniqueItems": true,
       "items": { "type": "string" },
-      "description": "enumerate only, and required there. The constants the models are told apart by, 1 to 256: two models that give them the same values are one model. Each is the name of a constant the problem declares, and none is named twice."
+      "description": "enumerate only, and required there. The constants the models are told apart by, 1 to 256: two models that give them the same values are one model. Each is the name of a constant the problem declares, and none is named twice. A constant whose values can hold an element of a sort the problem only declares (declare-sort: the sort itself, or an array, a sequence, an alias or a datatype that has it where a value goes) cannot be projected on, since the solver does not take such an element back when a found model is ruled out: the row is refused (project_sort_unsupported)."
     },
     "max_models": {
       "type": "integer",

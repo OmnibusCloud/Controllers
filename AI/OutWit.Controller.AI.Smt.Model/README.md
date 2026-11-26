@@ -195,6 +195,7 @@ host when a run is split, and wherever a preflight counts what a set holds.
 | `SmtProblemData` | an accepted problem as it travels to a node: its id, its query, its canonical text and hash, the terms beside it as canonical text, the expected verdict, the tags |
 | `SmtProblemSetSummary` | what was read, counted: rows taken and refused, the taken problems by logic, by query and by expected verdict, the stripped commands, the refusals by code and the first 1,000 of them in full, the licences |
 | `SmtProblemSetLimits` | the numbers below |
+| `SmtProjection` | the check of an enumeration's `project`, made by the reader of a set and made again by a node of what travelled to it: `Take(problem, names, out constants)` gives the constants as the problem declares them, or the refusal |
 | `SmtOptionsData`, `SmtOptionsRules` | the options of a run; their defaults and ceilings, `Check` and `Resolve` |
 | `SmtQuery` | `Check`, `Enumerate`, `Prove` |
 
@@ -236,7 +237,7 @@ the rule; a row it would not take is refused, by the field's name.
 | `smt2` | required; the text of the problem, sanitized as above |
 | `query` | optional: `check`, `enumerate` or `prove`; without it the query of the run's options |
 | `values` | `check` only; optional; 1 to 256 strings, each one term whose value is asked |
-| `project` | `enumerate` only, and required there; 1 to 256 strings, each the name of a constant the problem declares (by `declare-const`, or by a `declare-fun` of no arguments), none named twice |
+| `project` | `enumerate` only, and required there; 1 to 256 strings, each the name of a constant the problem declares (by `declare-const`, or by a `declare-fun` of no arguments), none named twice, each of a sort whose values the solver can be told back (see `project_sort_unsupported` below) |
 | `max_models` | `enumerate` only; optional; an integer from 1 to 1,000; without it the number of the run's options, and without that 2 |
 | `goal` | `prove` only, and required there; one term |
 | `expected` | `check` and `enumerate` only; optional; `sat` or `unsat`; it holds over the problem's `:status`. A `prove` row expects nothing |
@@ -271,12 +272,45 @@ characters, never more of the row.
 | `field_invalid` | a field's value is of another type (null included), outside its range, none of the words the field takes, or not valid Unicode text; an array is empty or too long; a name of `project` is no symbol, or names a constant twice |
 | `field_not_allowed` | the row holds a name that is no field of a row (a misspelt field is one), or a field of another query than the row's |
 | `unknown_constant` | a name of `project` is not a constant the problem declares |
+| `project_sort_unsupported` | a name of `project` is a constant whose values hold elements of a sort the problem only declares (`declare-sort`): the reason names the entry, the constant and that sort |
 | `too_many_problems` | the set has more than 1,000,000 rows; this row and what follows it were not read |
 
 What is looked at, in this order: the line is a row and every field that was given reads (the
 first fault in the order of the line); the row has its id, and no earlier row has it; it has its
 problem; every field belongs to the row's query and the query has the fields it needs; the
-sanitizer takes the problem; it takes the terms, and the names are declared constants.
+sanitizer takes the problem; it takes the terms, and the names are declared constants, each of a
+sort whose values the solver can be told back. Of the names of `project` the first that breaks a
+rule is the one named, in the order of the row.
+
+#### The sort of a projected constant
+
+An enumeration rules a found model out by telling the solver that not all of the projected
+constants have the values they had, and asks again. That works for a value the solver prints in
+a term it reads back. The pinned solver names the elements of a sort the problem only declares
+(`declare-sort`) by names of its own, inside one model (`U!val!0`), and takes none of them in a
+later command: a model with such a value cannot be ruled out. So a row is refused
+(`project_sort_unsupported`) when the values of a projected constant can hold an element of such
+a sort:
+
+- its sort is one, with or without arguments;
+- its sort is a sort of the theories (an array, a sequence, a function sort) with such a sort
+  for an argument: `(Array U Int)`, `(Seq U)`;
+- its sort is an alias (`define-sort`) of such a sort, or a datatype with such a sort in a field,
+  the parameters replaced by the arguments: `(Opt U)` where a constructor of `Opt` has a field of
+  its parameter.
+
+An argument counts only where a value has it: a datatype or an alias that never uses its
+parameter is taken whatever the argument is. The problem is read as the solver reads it, a name
+being what was declared before its use. Every other sort is taken: the numbers (irrational reals
+included), bit-vectors, strings, sequences, characters, floating point, arrays and the
+problem's own datatypes over them. A `check` and a `prove` row are not held to this: only an
+enumeration says values back.
+
+A value the pinned solver prints in a form it does not read back under the problem's logic is
+not refused by its sort (no sort always prints so): the enumeration ends at that model with the
+models it found (`SmtResultData.Reason` `other`, not complete). One such form is known: an array
+that is the identity (`(Array Bool Bool)` mapping each index to itself) is printed as a function,
+which a logic without quantifiers does not take.
 
 ### The options of a run
 
@@ -550,7 +584,7 @@ bytes, low byte first.
 | `Status` | `ok`, `refused`, `input_error`, `output_exceeded`, `engine_crash`, `node_fault` |
 | `Code`, `Message` | the fixed word of the outcome's kind and its sentence (at most 1,024 characters): a refusal's code and reason, the solver's message of an input error, the kind of a crash or of a fault |
 | `Verdict` | `sat`, `unsat`, `unknown`, `none` |
-| `Reason`, `ReasonText` | for an `unknown`: `rlimit`, `fuel`, `memout`, `incomplete`, `other` (else `none`), and the solver's own word |
+| `Reason`, `ReasonText` | for an `unknown`, and for an enumeration that is not complete: `rlimit`, `fuel`, `memout`, `incomplete`, `other` (else `none`), and the solver's own word. `other` is also the reason of an enumeration that ended, its models kept, because the solver did not take a found model's values back; the word is then what the solver said to that |
 | `Proof` | `proved`, `counterexample`, `none` |
 | `Count`, `Complete`, `LimitReached` | what an enumeration found |
 | `Models`, `Values` | as the solver printed them, all of them: what a lab is shown of them is the report's to cut |

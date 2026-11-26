@@ -84,18 +84,25 @@ one outcome. It throws for nothing a problem or the solver holds.
 | Query | What is sent after the options, the problem and the resource limit |
 |---|---|
 | `check` | `(check-sat)` and the statistics; after `sat` the model and the values of the terms the row asks for; after `unknown` the reason |
-| `enumerate` | `(check-sat)` and the statistics; after `sat` the values of the projected constants and the model, then the assertion that not all of those constants have those values, and the next check; until the number of models is reached, or a check says `unsat` (the count is exact) or `unknown` |
+| `enumerate` | `(check-sat)` and the statistics; after `sat` the values of the projected constants and the model, then the assertion that not all of those constants have those values, and the next check; until the number of models is reached, or a check says `unsat` (the count is exact) or `unknown`, or the solver says anything to that assertion (it did not read a value back as it printed it: the enumeration ends there with the models it has) |
 | `prove` | the negated goal with the problem, then as `check`: `unsat` is proved, `sat` is a counterexample with its model |
 
 No `set-info` of a problem reaches the solver, and no command of the problem's own asks it to act.
+
+An enumeration says a found model's values back to the solver, so it is projected only on
+constants whose values the solver takes back: the model package's `SmtProjection` refuses a
+projection on a constant whose values hold elements of a sort the problem only declares
+(`project_sort_unsupported`; its README says which sorts those are). The reader of a problem set
+makes that check when the set is read, and a node makes the same check of what travelled to it:
+a node refuses no projection the host took.
 
 ## The outcome
 
 | Status | When |
 |---|---|
 | `ok` | the query was answered: `sat`, `unsat`, or `unknown` with its reason |
-| `refused` | the options or the problem were not taken; no solver ran. The code is the sanitizer's, or `hash_mismatch`, `profile_unknown`, `options_invalid` |
-| `input_error` | the solver reported an error in what it was given, or said anything at all to a statement (a logic it does not know); its message is kept, cut to 512 characters |
+| `refused` | the options or the problem were not taken; no solver ran. The code is the sanitizer's or a row's (`project_sort_unsupported` for a projection the solver cannot be told back), or `hash_mismatch`, `profile_unknown`, `options_invalid` |
+| `input_error` | the solver reported an error in what it was given, or said anything at all to a statement of the problem's (a logic it does not know); its message is kept, cut to 512 characters |
 | `output_exceeded` | the session wrote more than its output cap. The verdict of a check the solver had answered by then stands: it said `sat`, and it is the model that did not fit |
 | `engine_crash` | a trap, an exit status that is no answer, an answer that cannot be read |
 | `node_fault` | the machine, not the problem: no sandbox, the wall-clock backstop, a cancelled session, a file the host could not use |
@@ -106,7 +113,7 @@ No `set-info` of a problem reaches the solver, and no command of the problem's o
 | `fuel` | the session's fuel ran out |
 | `memout` | the solver was refused memory: its exit status 101 with its line `(error "out of memory")`, or the sandbox's cap of the heap its exceptions live in |
 | `incomplete` | the solver's own word |
-| `other` | any other word of the solver's, which the outcome keeps |
+| `other` | any other word of the solver's, which the outcome keeps. Also the reason of an enumeration that ended, its models kept and not complete, because the solver did not take a found model's values back: the word kept is what the solver said to the assertion (the pinned solver prints an array that is the identity as a function, which a logic without quantifiers does not read) |
 
 Beside them the outcome holds, for an enumeration, the count and whether it is complete; for a
 proof, proved or counterexample; the models and the values as the solver printed them, for the

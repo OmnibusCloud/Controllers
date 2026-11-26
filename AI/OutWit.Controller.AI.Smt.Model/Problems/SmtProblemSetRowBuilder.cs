@@ -12,7 +12,7 @@ namespace OutWit.Controller.AI.Smt.Model.Problems;
 /// <item>the row has a problem;</item>
 /// <item>every field belongs to the row's query (the row's own, else the run's), and the query has the fields it needs;</item>
 /// <item>the problem is one the sanitizer takes;</item>
-/// <item>the terms and the names beside it are terms the sanitizer takes, and the names are constants the problem declares.</item>
+/// <item>the terms and the names beside it are terms the sanitizer takes, and the names are constants the problem declares, of sorts whose values the solver can be told back (<see cref="SmtProjection"/>).</item>
 /// </list>
 /// The first row with an id keeps it, whatever becomes of the row: a later row with the same id
 /// is a duplicate even when the first was refused.
@@ -208,36 +208,19 @@ internal sealed class SmtProblemSetRowBuilder
     }
 
     /// <summary>
-    /// The constants an enumeration is projected on: each a symbol that names a constant the
-    /// problem declares, none twice. A name is kept as the problem declares it.
+    /// The constants an enumeration is projected on, by the check a node makes of them again
+    /// (<see cref="SmtProjection"/>): each a symbol that names a constant the problem declares,
+    /// none twice, each of a sort whose values the solver can be told back. A name is kept as the
+    /// problem declares it.
     /// </summary>
     private SmtRefusalData? Names(SmtProblemSetRowDraft draft, SmtProblem problem, SmtProblemData data)
     {
-        var declared = new Dictionary<string, SmtDeclaredConstant>(StringComparer.Ordinal);
-        foreach (var constant in problem.Constants)
-            declared.TryAdd(constant.Name, constant);
+        var refusal = SmtProjection.Take(problem, draft.Project!, out var constants);
+        if (refusal != null)
+            return refusal;
 
-        var texts = draft.Project!;
-        var named = new HashSet<string>(StringComparer.Ordinal);
-
-        for (var index = 0; index < texts.Count; index++)
-        {
-            var term = SmtSanitizer.SanitizeTerm(texts[index]);
-            if (!term.IsAccepted)
-                return In(term.Refusal!, $"project[{index}]");
-
-            if (term.Term.Kind != SmtExpressionKind.Symbol)
-                return SmtRefusals.OfRow(SmtRefusalCodes.FIELD_INVALID, $"'project[{index}]' must be the name of a constant: one symbol");
-
-            var name = term.Term.Text;
-            if (!declared.TryGetValue(name, out var constant))
-                return SmtRefusals.OfRow(SmtRefusalCodes.UNKNOWN_CONSTANT, $"'project[{index}]' names '{SmtRefusals.Token(name)}', which the problem does not declare as a constant");
-
-            if (!named.Add(name))
-                return SmtRefusals.OfRow(SmtRefusalCodes.FIELD_INVALID, $"'project[{index}]' names '{SmtRefusals.Token(name)}' again: a constant is named once");
-
+        foreach (var constant in constants)
             data.Project.Add(constant.Symbol.ToString());
-        }
 
         data.MaxModels = draft.MaxModels ?? m_options.MaxModels;
         return null;

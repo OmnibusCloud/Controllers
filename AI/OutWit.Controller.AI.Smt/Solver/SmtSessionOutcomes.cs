@@ -14,7 +14,10 @@ namespace OutWit.Controller.AI.Smt.Solver;
 /// <item>the solver ended with its status 101 and its line <c>(error "out of memory")</c>, at its own
 /// ceiling or at the host's cap of the linear memory, or the engine refused more memory for
 /// the solver's exception objects: <c>unknown</c> by <c>memout</c>;</item>
-/// <item>an answer that was an error, or anything said to a statement: <c>input_error</c>;</item>
+/// <item>an answer that was an error, or anything said to a statement of the problem's: <c>input_error</c>;</item>
+/// <item>anything said to the assertion that rules a found model of an enumeration out (the
+/// solver did not take a value back as it printed it): the enumeration is over with the models
+/// it has, <c>sat</c>, incomplete by <c>other</c>, with the solver's answer for its word;</item>
 /// <item>the output passed its cap: <c>output_exceeded</c>;</item>
 /// <item>a trap, another error of the engine, an exit status that is no answer, an answer that
 /// cannot be read: <c>engine_crash</c>;</item>
@@ -94,6 +97,10 @@ internal static class SmtSessionOutcomes
                 return Exceeded(record, run);
             case WasmHostVerdict.Exited when run.ExitCode == SmtProfile.MEMORY_EXIT_CODE:
                 return Stopped(record, run, SmtUnknownReason.Memory);
+            case WasmHostVerdict.Exited when record.BlockRefused && record.Over && run.ExitCode is EXIT_CLEAN or EXIT_WITH_ERRORS:
+                // The solver counts what it said to the assertion as an error and ends with that
+                // status. It is the enumeration's end, not an error of the problem's.
+                return Enumerated(record, run, SmtUnknownReason.Other);
             case WasmHostVerdict.Exited when record.Over && run.ExitCode == EXIT_CLEAN:
                 return Answered(record, run);
             case WasmHostVerdict.Exited when record.Over && run.ExitCode == EXIT_WITH_ERRORS:

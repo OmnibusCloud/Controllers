@@ -20,7 +20,7 @@
     "message": { "type": "string", "maxLength": 1024, "description": "The sentence that goes with the code: a refusal's reason (never the problem's text), the solver's message of an input error; empty for an answered query." },
     "line": { "type": "integer", "minimum": 0, "description": "For a row the set refused: the line inside the problem's text the sanitizer refused, 0 for a refusal of the row itself." },
     "verdict": { "type": "string", "enum": ["sat", "unsat", "unknown", "none"] },
-    "reason": { "type": "string", "enum": ["rlimit", "fuel", "memout", "incomplete", "other", "none"], "description": "Why a check has no verdict or an enumeration is not complete: the resource limit of a check, the fuel of the hard cap, the memory, the solver's own word; none otherwise." },
+    "reason": { "type": "string", "enum": ["rlimit", "fuel", "memout", "incomplete", "other", "none"], "description": "Why a check has no verdict or an enumeration is not complete: the resource limit of a check, the fuel of the hard cap, the memory, the solver's own word; none otherwise. other also for an enumeration that ended with the models it had found because the solver did not take a found model's values back." },
     "expected": { "type": "string", "enum": ["sat", "unsat", "none"], "description": "The verdict the row or the problem's :status expects; none for a proof." },
     "expected_agreement": { "type": "string", "enum": ["agree", "disagree", "n/a"], "description": "agree or disagree when a verdict sat or unsat meets an expected one; n/a otherwise." },
     "count": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "enumerate: the models found." },

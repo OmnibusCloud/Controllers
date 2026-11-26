@@ -19,6 +19,12 @@ public sealed class SmtSolverRefusalTests
     private const string PROBLEM = "(set-logic QF_LIA)(declare-const x Int)(declare-const y Int)(assert (= (+ x y) 10))";
     private const string NO_SANDBOX = "a machine without a sandbox";
 
+    /// <summary>What a node without a sandbox says of a problem its plan took: a fault of the node, no refusal.</summary>
+    private const string NOT_REFUSED = "node_fault sandbox_unavailable";
+
+    // The code as a lab reads it: a public word of the contract, written out here.
+    private const string PROJECT_SORT_UNSUPPORTED = "project_sort_unsupported";
+
     #endregion
 
     #region Options Tests
@@ -221,7 +227,130 @@ public sealed class SmtSolverRefusalTests
 
     #endregion
 
+    #region Projection Sort Tests
+
+    [TestCaseSource(typeof(SmtProjectionCases), nameof(SmtProjectionCases.Refused))]
+    public void AProjectionTheReaderOfASetRefusesIsRefusedByANodeInTheSameWordsTest(string id)
+    {
+        // A node reads again what travelled to it. A problem a host of this controller would
+        // never send (the reader of the set refuses its row) is refused by the node by the same
+        // rule, with the same code and the same reason.
+        var one = SmtProjectionCases.Of(id);
+        var host = Problems.SmtProblemSets.Refuse(one.Row(), PROJECT_SORT_UNSUPPORTED);
+
+        var solved = Solve(one.Problem(), new SmtOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(solved.Words(), Is.EqualTo($"refused {PROJECT_SORT_UNSUPPORTED}"));
+            Assert.That(solved.Message, Is.EqualTo(host.Reason));
+            Assert.That(solved.Fuel, Is.Zero, "no session ran");
+            Assert.That(solved.Checks, Is.Zero);
+            Assert.That(solved.Transcript, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void ANodeRefusesNoProjectionTheReaderOfASetTookTest()
+    {
+        // The property the two ends are held to: whatever the reader of a set takes, a node's
+        // plan takes (a node without a sandbox then says that it has none, which is no refusal),
+        // and whatever a node's plan refuses by the rule of the sorts, the reader refuses.
+        Assert.Multiple(() =>
+        {
+            foreach (var one in SmtProjectionCases.All)
+            {
+                var row = Problems.SmtProblemSets.Read(one.Row()).Rows.Single();
+                var node = Solve(one.Problem(), new SmtOptionsData());
+
+                Assert.That(row.IsAccepted, Is.EqualTo(!one.IsRefused), $"{one.Id}: the reader of the set");
+                Assert.That(node.Words(), Is.EqualTo(one.IsRefused ? $"refused {PROJECT_SORT_UNSUPPORTED}" : NOT_REFUSED), $"{one.Id}: the node's plan");
+
+                // And what a host sends is what the node took: the row's own problem, as it travels.
+                if (row.IsAccepted)
+                    Assert.That(Solve(row.Data, new SmtOptionsData()).Words(), Is.EqualTo(NOT_REFUSED), $"{one.Id}: the row the reader made");
+            }
+        });
+    }
+
+    [Test]
+    public void ASortMadeAtRandomIsTakenOrRefusedAlikeByBothEndsAndByItsOwnShapeTest()
+    {
+        // Sorts put together at random from the makers below, each of which either has its
+        // argument in a value or does not: the test knows from the shape alone whether a value
+        // can hold an element of U, and the reader of a set and a node's plan must both say so.
+        const int SORTS = 2_000;
+        const int SEED = 20261126;
+        const string DECLARATIONS =
+            "(declare-sort U 0)(declare-sort P 1)"
+            + "(declare-datatype Opt (par (T) ((none) (some (get T)))))"
+            + "(declare-datatype Ph (par (T) ((ph (val Bool)))))"
+            + "(declare-datatype Pr (par (A B) ((pr (fst A) (snd B)))))"
+            + "(declare-datatype Half (par (A B) ((half (only A)))))"
+            + "(define-sort Drop (T) Int)(define-sort Same (T) T)(define-sort Tail (A B) (Seq B))";
+
+        var random = new Random(SEED);
+        var refused = 0;
+
+        Assert.Multiple(() =>
+        {
+            for (var number = 0; number < SORTS; number++)
+            {
+                var (sort, holds) = RandomSort(random, 4);
+                var one = new SmtProjectionCase($"random-{number}", DECLARATIONS + $"(declare-const c {sort})", 2, ["c"], "");
+
+                var row = Problems.SmtProblemSets.Read(one.Row()).Rows.Single();
+                var node = Solve(one.Problem(), new SmtOptionsData());
+                refused += holds ? 1 : 0;
+
+                Assert.That(row.IsAccepted, Is.EqualTo(!holds), $"{sort}: the reader of the set ({row.Refusal?.Code})");
+                Assert.That(node.Words(), Is.EqualTo(holds ? $"refused {PROJECT_SORT_UNSUPPORTED}" : NOT_REFUSED), $"{sort}: the node's plan");
+            }
+        });
+
+        TestContext.Out.WriteLine($"{SORTS} sorts, {refused} refused");
+        Assert.That(refused, Is.InRange(SORTS / 5, 4 * SORTS / 5), "the sorts are of both kinds");
+    }
+
+    #endregion
+
     #region Tools
+
+    /// <summary>
+    /// A sort made at random, and whether its values can hold an element of an uninterpreted
+    /// sort, told from how it was made.
+    /// </summary>
+    private static (string Sort, bool Holds) RandomSort(Random random, int depth)
+    {
+        if (depth == 0 || random.Next(4) == 0)
+        {
+            return random.Next(5) switch
+            {
+                0 => ("U", true),
+                1 => ("Int", false),
+                2 => ("Bool", false),
+                3 => ("(_ BitVec 8)", false),
+                _ => ("String", false)
+            };
+        }
+
+        var (first, firstHolds) = RandomSort(random, depth - 1);
+        var (second, secondHolds) = RandomSort(random, depth - 1);
+        return random.Next(11) switch
+        {
+            0 => ($"(Array {first} {second})", firstHolds || secondHolds),
+            1 => ($"(Seq {first})", firstHolds),
+            2 => ($"(Opt {first})", firstHolds),
+            3 => ($"(Ph {first})", false),
+            4 => ($"(Pr {first} {second})", firstHolds || secondHolds),
+            5 => ($"(Half {first} {second})", firstHolds),
+            6 => ($"(Drop {first})", false),
+            7 => ($"(Same {first})", firstHolds),
+            8 => ($"(Tail {first} {second})", secondHolds),
+            9 => ($"(P {first})", true),
+            _ => ($"(-> {first} {second})", firstHolds || secondHolds)
+        };
+    }
 
     /// <summary>Solves as a machine without a sandbox would: what is refused is refused before the sandbox is asked for.</summary>
     private static SmtSolved Solve(SmtProblemData problem, SmtOptionsData options)

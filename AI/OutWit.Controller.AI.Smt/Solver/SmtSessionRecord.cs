@@ -62,7 +62,7 @@ internal sealed class SmtSessionRecord
     /// <summary>The verdict of the last check the solver answered; none before the first.</summary>
     public SmtVerdict Verdict { get; set; }
 
-    /// <summary>Why the last check has no verdict, once the solver has said so.</summary>
+    /// <summary>Why the last check has no verdict, once the solver has said so; or why an enumeration could not go on to its next check.</summary>
     public SmtUnknownReason Reason { get; set; }
 
     /// <summary>The solver's own word for it.</summary>
@@ -79,6 +79,9 @@ internal sealed class SmtSessionRecord
 
     /// <summary>Whether an enumeration stopped at its number of models.</summary>
     public bool LimitReached { get; set; }
+
+    /// <summary>Whether an enumeration stopped because the solver did not take the assertion that rules its last model out.</summary>
+    public bool BlockRefused { get; set; }
 
     /// <summary>Whether the session found itself cancelled at one of the solver's reads.</summary>
     public bool Cancelled { get; set; }

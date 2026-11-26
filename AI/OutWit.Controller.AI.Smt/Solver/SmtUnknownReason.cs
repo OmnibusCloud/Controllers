@@ -22,6 +22,10 @@ internal enum SmtUnknownReason
     /// <summary><c>incomplete</c>: the solver's procedure is not complete for the problem, by its own word.</summary>
     Incomplete = 4,
 
-    /// <summary><c>other</c>: any other word of the solver's; the outcome keeps it.</summary>
+    /// <summary>
+    /// <c>other</c>: any other word of the solver's; the outcome keeps it. Also the reason of an
+    /// enumeration that ended because the solver did not take a found model's values back: the
+    /// word kept is what the solver said to that.
+    /// </summary>
     Other = 5
 }
