@@ -146,6 +146,8 @@ class MainTests(unittest.TestCase):
             json.dump(report(), handle)
         with open(os.path.join(folder, "integrity.json"), "w", encoding="utf-8") as handle:
             json.dump({"summary": integrity()}, handle)
+        with open(os.path.join(folder, "provenance.json"), "w", encoding="utf-8") as handle:
+            json.dump({"profile": {"module_sha256": check.module_sha256()}, "problem_set": {"sha256": "5" * 64}}, handle)
 
     def test_the_exit_code_says_whether_everything_held(self):
         items = listing()

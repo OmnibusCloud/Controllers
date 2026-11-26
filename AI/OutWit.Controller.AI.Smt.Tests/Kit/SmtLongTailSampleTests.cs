@@ -18,8 +18,8 @@ namespace OutWit.Controller.AI.Smt.Tests.Kit;
 /// run, and the numbers written here hold everywhere.
 /// <para>
 /// Held: every verdict is the problem's <c>:status</c>, or unknown because a budget ended; no
-/// model the evaluator checks fails; and the options decide the share of the sample written
-/// here. The log states each problem's cost against its competition time: the fuel as seconds
+/// model the evaluator checks fails, and every model of the sample is validated; and the options
+/// decide the share of the sample written here. The log states each problem's cost against its competition time: the fuel as seconds
 /// of the reference machine, the wall time on this machine, the peak of the solver's memory.
 /// </para>
 /// <para>
@@ -179,6 +179,20 @@ public sealed class SmtLongTailSampleTests
                     $"{result.Row.Id} ({result.Row.Logic}): the evaluator says the solver's model does not satisfy the problem: {result.Validation.Reason} {result.Validation.Detail}");
                 Assert.That(result.Validation.Reason, Is.Not.EqualTo(SmtValidationReasons.EVALUATOR_ERROR), $"{result.Row.Id} ({result.Row.Logic}): a defect of the evaluator: {result.Validation.Detail}");
             }
+        });
+    }
+
+    [Test]
+    public void EveryModelOfTheSampleIsValidatedTest()
+    {
+        // The kit's EXPECTED.md: every one of the sample's twenty models validated, not only none failed.
+        var models = m_results.Where(result => result.Outcome?.Verdict == "sat").ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(models, Has.Count.EqualTo(SAMPLE / 2), "ten sat problems of each logic");
+            foreach (var result in models)
+                Assert.That(result.Validation?.Class, Is.EqualTo(SmtValidationClass.Validated), $"{result.Row.Id} ({result.Row.Logic}): {result.Validation?.Reason} {result.Validation?.Detail}");
         });
     }
 

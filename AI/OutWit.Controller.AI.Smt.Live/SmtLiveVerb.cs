@@ -12,6 +12,9 @@ internal enum SmtLiveVerb
     /// <summary>Uploads a problem set, runs <c>SmtRun</c>, downloads and checks the four documents.</summary>
     Run,
 
+    /// <summary>Waits for a job of <c>SmtRun</c> submitted earlier, by its id, then downloads and checks its four documents as <c>run</c> does.</summary>
+    Fetch,
+
     /// <summary>Compares the documents of two runs of one problem set.</summary>
     Compare,
 

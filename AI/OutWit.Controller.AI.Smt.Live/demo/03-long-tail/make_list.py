@@ -262,19 +262,40 @@ def pump(raw, sink):
             pass
 
 
+class Counted:
+    """A readable stream that counts the bytes it gave."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.given = 0
+
+    def read(self, size=-1):
+        data = self.stream.read(size)
+        self.given += len(data)
+        return data
+
+
 def scan(tar_stream, wanted):
     """Reads a tar stream and describes every member that is wanted.
 
     wanted: a set of member paths. Returns {member: (bytes, sha256, status in its text or "")}.
+    The stream must be the whole archive: a tar ends with blocks of zeros after its last member,
+    and a stream that ends where a member's header would start (a download cut between two
+    members) is refused, not taken for an archive with fewer members (whose table would be
+    written short and read again by the next run).
     """
     found = {}
-    with tarfile.open(fileobj=tar_stream, mode="r|") as archive:
+    counted = Counted(tar_stream)
+    with tarfile.open(fileobj=counted, mode="r|") as archive:
         for member in archive:
             if not member.isfile() or member.name not in wanted:
                 continue
             data = archive.extractfile(member).read()
             match = STATUS_PATTERN.search(data)
             found[member.name] = (len(data), hashlib.sha256(data).hexdigest(), match.group(1).decode("ascii") if match else "")
+        if counted.given <= archive.offset:
+            raise SystemExit("the stream ended inside the archive, after %d bytes and %d wanted member(s): nothing of it is kept; run again" % (
+                counted.given, len(found)))
     return found
 
 

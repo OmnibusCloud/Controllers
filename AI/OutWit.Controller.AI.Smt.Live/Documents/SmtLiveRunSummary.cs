@@ -7,9 +7,12 @@ namespace OutWit.Controller.AI.Smt.Live.Documents;
 /// Prints what a run's report and integrity document say, with the rows of the results a lab
 /// must look at: what the run ran with, the set, the verdicts and the unknowns by reason, the
 /// agreement with the expected verdicts, the evaluator's classes, the copies and how they
-/// agreed, the disputes and how they ended, the lies found, the disagreements between the
-/// evaluator and the solver, the problems without a result, and how the work was delivered.
-/// What a known-answers run must not have is said loudly, and returned as the run's alarms.
+/// agreed, what rests on one machine and whether the platform told the server which package
+/// each result came back for, the disputes and how they ended, the lies found, the
+/// disagreements between the evaluator and the solver, the problems without a result, and how
+/// the work was delivered. The report is held to the rows it was written from. What a
+/// known-answers run must not have is said loudly, and returned as the run's alarms: every loud
+/// line is an alarm, and every alarm has a loud line, whether the report or a row says it.
 /// </summary>
 internal sealed class SmtLiveRunSummary
 {
@@ -20,6 +23,10 @@ internal sealed class SmtLiveRunSummary
 
     private const int SHOWN_ROWS = 10;
     private const int SHOWN_INDICES = 20;
+    private const int SHOWN_DIFFERENCES = 10;
+
+    // The report's word for a sampling that was asked for and did not happen.
+    private const string SHORT = "short";
 
     #endregion
 
@@ -67,7 +74,12 @@ internal sealed class SmtLiveRunSummary
         PrintIntegrity(integrity, summary, rows.Ids);
         PrintRows(rows);
 
-        return Alarms(report, summary);
+        var differences = Differences(report, rows);
+        if (differences.Count > 0)
+            Line("rows", $"THE REPORT AND THE RESULTS DISAGREE: {string.Join("; ", differences.Take(SHOWN_DIFFERENCES))}" +
+                         $"{(differences.Count > SHOWN_DIFFERENCES ? $" and {differences.Count - SHOWN_DIFFERENCES} more" : "")}", true);
+
+        return Alarms(report, summary, rows, differences.Count);
     }
 
     private void PrintRun(JsonElement report)
@@ -76,7 +88,8 @@ internal sealed class SmtLiveRunSummary
         Line("run", $"profile {Text(report, "run", "profile")}, module {Head(Text(report, "run", "module_sha256"))}, controller {Text(report, "run", "controller")}");
         Line("options", $"query {Text(options, "query")}, rlimit {Number(options, "rlimit")}, hard cap {Number(options, "hard_cap_s")} s (fuel {Number(options, "fuel")}), " +
                         $"memory {Number(options, "memory_mb")} MB, seed {Number(options, "seed")}, max models {Number(options, "max_models")}");
-        Line("sampling", $"rate {Text(report, "run", "sampling_rate")}, {Text(report, "run", "sampling")}; packages without an answer {Number(report, "run", "unanswered_packages")}");
+        Line("sampling", $"rate {Text(report, "run", "sampling_rate")}, {Text(report, "run", "sampling")}; packages without an answer {Number(report, "run", "unanswered_packages")}",
+            Text(report, "run", "sampling") == SHORT);
 
         var set = At(report, "problem_set");
         Line("set", $"{Number(set, "rows")} row(s): {Number(set, "accepted")} taken, {Number(set, "refused")} refused ({NonZero(set, "refused_by_code")})");
@@ -116,7 +129,9 @@ internal sealed class SmtLiveRunSummary
                        $"settled by {Counts(copies, "settled_by")}");
         Line("", $"compared {Number(summary, "compared")}: {Number(summary, "agreements")} agreement(s), {Number(summary, "disagreements")} disagreement(s); " +
                  $"{Number(summary, "copies_made")} answer(s) taken in all");
-        Line("one copy", $"{Number(summary, "one_copy")} problem(s) rest on one machine, {Number(summary, "unsat_one_copy")} of them unsat ({Indices(report, "unsat_one_copy", "indices")})");
+        Line("one copy", $"{Number(summary, "one_copy")} problem(s) rest on one machine, {Number(summary, "unsat_one_copy")} of them unsat ({Indices(report, "unsat_one_copy", "indices")}), " +
+                         $"{Number(report, "complete_one_copy", "count")} complete enumeration(s) that found models ({Indices(report, "complete_one_copy", "indices")})");
+        Line("binding", $"{Text(summary, "binding")}: {Number(summary, "results_bound")} result(s) told the package they came back for, {Number(summary, "results_unbound")} not");
     }
 
     private void PrintIntegrity(JsonElement integrity, JsonElement summary, IReadOnlyDictionary<int, string> ids)
@@ -156,7 +171,7 @@ internal sealed class SmtLiveRunSummary
             var selected = At(fanOut, "selected");
             Line("fan-out", $"{Text(fanOut, "round")}: {Number(fanOut, "packages")} package(s) of {Number(fanOut, "problems")} problem(s), " +
                             $"{(selected.ValueKind == JsonValueKind.Number ? selected.GetRawText() : "an unstated number")} asked for {Number(fanOut, "copies")} answer(s), " +
-                            $"{Number(fanOut, "complete")} complete, {Number(fanOut, "unanswered")} unanswered", Number(fanOut, "unanswered") > 0);
+                            $"{Number(fanOut, "complete")} complete, {Number(fanOut, "unanswered")} unanswered");
         }
     }
 
@@ -181,20 +196,57 @@ internal sealed class SmtLiveRunSummary
         }
     }
 
-    private static List<string> Alarms(JsonElement report, JsonElement summary)
+    /// <summary>
+    /// The run's alarms. A count the report gives and the rows say too is taken as the larger of
+    /// the two: a row said loudly is an alarm whatever the report counts.
+    /// </summary>
+    private static List<string> Alarms(JsonElement report, JsonElement summary, SmtLiveRowScan rows, int differences)
     {
         var alarms = new List<string>();
         Alarm(alarms, Number(summary, "evaluator_solver_disagreements"), "disagreement(s) between the evaluator and the solver");
         Alarm(alarms, Number(summary, "lies"), "lie(s) found");
         Alarm(alarms, Number(summary, "disputed"), "dispute(s) standing");
         Alarm(alarms, Number(summary, "no_result"), "problem(s) without a result");
-        Alarm(alarms, Number(report, "expected", "disagree"), "verdict(s) that disagree with the expected one");
-        Alarm(alarms, Number(report, "validation", "classes", "failed"), "settled row(s) whose model the evaluator calls failed");
+        Alarm(alarms, Math.Max(Number(report, "expected", "disagree"), rows.DisagreeingCount), "verdict(s) that disagree with the expected one");
+        Alarm(alarms, Math.Max(Number(report, "validation", "classes", "failed"), rows.FailedCount), "settled row(s) whose model the evaluator calls failed");
 
-        if (Text(report, "run", "sampling") == "short")
+        if (Text(report, "run", "sampling") == SHORT)
             alarms.Add("the sampling asked for did not happen (short)");
 
+        if (differences > 0)
+            alarms.Add($"the report and the results disagree ({differences} count(s))");
+
         return alarms;
+    }
+
+    /// <summary>
+    /// Where the report does not count the rows it was written from: their number, and by
+    /// status, verdict, agreement with the expected verdict and the evaluator's class.
+    /// </summary>
+    private static List<string> Differences(JsonElement report, SmtLiveRowScan rows)
+    {
+        var differences = new List<string>();
+        var counted = Number(report, "problem_set", "rows");
+        if (counted != rows.Rows)
+            differences.Add($"rows: report {counted}, rows {rows.Rows}");
+
+        Differences(differences, "statuses", At(report, "statuses"), rows.Statuses);
+        Differences(differences, "verdicts", At(report, "verdicts"), rows.Verdicts);
+        Differences(differences, "expected", At(report, "expected"), rows.Expectations);
+        Differences(differences, "validation", At(report, "validation", "classes"), rows.Classes);
+        return differences;
+    }
+
+    private static void Differences(List<string> differences, string name, JsonElement counts, IReadOnlyDictionary<string, int> seen)
+    {
+        var words = counts.ValueKind == JsonValueKind.Object ? counts.EnumerateObject().Select(member => member.Name) : [];
+        foreach (var word in words.Union(seen.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var reported = Number(counts, word);
+            var found = seen.GetValueOrDefault(word);
+            if (reported != found)
+                differences.Add($"{name} {word}: report {reported}, rows {found}");
+        }
     }
 
     private static void Alarm(List<string> alarms, long count, string what)

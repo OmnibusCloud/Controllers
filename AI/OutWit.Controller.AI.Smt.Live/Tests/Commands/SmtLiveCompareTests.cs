@@ -84,7 +84,7 @@ public sealed class SmtLiveCompareTests
         var output = m_output.ToString();
         Assert.Multiple(() =>
         {
-            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.FAILED));
+            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.DIFFER));
             Assert.That(output, Does.Contain("3 DIFFER"));
             Assert.That(output, Does.Contain("[1] b: verdict: \"unsat\" vs \"sat\"; digest: "));
             Assert.That(output, Does.Contain("[2] c: models[1].values: \"((y 1))\" vs \"((y 7))\""));
@@ -99,7 +99,7 @@ public sealed class SmtLiveCompareTests
         var lines = File.ReadAllLines(Results(m_right)).Where(line => line.Length > 0).ToList();
         File.WriteAllText(Results(m_right), string.Join("\n", lines.Take(3)) + "\n");
 
-        Assert.That(Compare(), Is.EqualTo(SmtLiveExitCodes.FAILED));
+        Assert.That(Compare(), Is.EqualTo(SmtLiveExitCodes.DIFFER));
         Assert.That(m_output.ToString(), Does.Contain("row 4: only in the first run"));
     }
 
@@ -115,7 +115,7 @@ public sealed class SmtLiveCompareTests
         var exit = Compare();
 
         var output = m_output.ToString();
-        Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.FAILED));
+        Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.DIFFER));
         Assert.That(output, Does.Contain("provenance: DIFFERS").And.Contain("$.options.seed: 0 vs 7").And.Contain("$.problem_set.sha256: "));
         Assert.That(output, Does.Contain("and the provenance"));
     }
@@ -134,6 +134,19 @@ public sealed class SmtLiveCompareTests
         });
 
         Assert.That(Compare(), Is.EqualTo(SmtLiveExitCodes.OK));
+    }
+
+    [Test]
+    public void ARowThatIsJsonButNoObjectIsADifferenceAndNoCrashTest()
+    {
+        var lines = File.ReadAllLines(Results(m_right));
+        lines[1] = "[1,2]";
+        File.WriteAllLines(Results(m_right), lines);
+
+        var exit = Compare();
+
+        Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.DIFFER));
+        Assert.That(m_output.ToString(), Does.Contain("row 2: not a JSON object in one of the runs"));
     }
 
     [Test]

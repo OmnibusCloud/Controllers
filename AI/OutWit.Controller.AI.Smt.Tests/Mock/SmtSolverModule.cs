@@ -2,9 +2,10 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 
 /// <summary>
 /// The solver module the tests run: <c>@Data/wasm/z3-5.4.1.wasm</c> under the test project
-/// (gitignored), where the archive <c>smt-z3-wasm.zip</c> of the workflow "AI Smt toolchain"
-/// unpacks. A test that needs it is ignored, with the reason, when it is absent - and fails on
-/// the build server, which takes the archive from that workflow before the tests.
+/// (gitignored), where the archive <c>smt-z3-wasm.zip</c> unpacks: the archive of the release the
+/// controller's project file names, which the workflow "AI Smt toolchain" builds from its pins.
+/// A test that needs it is ignored, with the reason, when it is absent - and fails on the build
+/// server, which downloads the archive and holds it to the pins before the tests.
 /// </summary>
 internal static class SmtSolverModule
 {
@@ -34,7 +35,7 @@ internal static class SmtSolverModule
         if (path != null)
             return path;
 
-        var reason = $"the solver module is not in the test project's {DATA_FOLDER}/{RELATIVE_PATH}: unpack smt-z3-wasm.zip (the artifact of the workflow \"AI Smt toolchain\") into {DATA_FOLDER} to run the solver's tests";
+        var reason = $"the solver module is not in the test project's {DATA_FOLDER}/{RELATIVE_PATH}: unpack smt-z3-wasm.zip (the release smt-z3-v5.4.1, or the artifact of the workflow \"AI Smt toolchain\") into {DATA_FOLDER} to run the solver's tests";
         if (OnBuildServer)
             Assert.Fail(reason);
 

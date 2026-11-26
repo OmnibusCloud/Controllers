@@ -7,7 +7,10 @@ namespace OutWit.Controller.AI.Smt.Live.Documents;
 /// One pass over the results of a run, a row at a time: the ids of the problems the integrity
 /// document names by index, and the rows a lab must look at, the first few of each kind in full
 /// and all of them counted: the rows not answered <c>ok</c>, the verdicts that disagree with the
-/// expected one, and the models the evaluator calls failed.
+/// expected one, and the models the evaluator calls failed. And the counts the report gives of
+/// the same rows, counted as the report counts them (the statuses, the verdicts of the rows
+/// answered <c>ok</c> or <c>output_exceeded</c>, the agreement with the expected verdicts, the
+/// evaluator's classes of the rows a node answered), so the report can be held to its rows.
 /// </summary>
 internal sealed class SmtLiveRowScan
 {
@@ -73,6 +76,18 @@ internal sealed class SmtLiveRowScan
             Ids[index] = id;
 
         var status = SmtLiveJson.Text(row, "status");
+        var verdict = SmtLiveJson.Text(row, "verdict");
+        var validation = SmtLiveJson.Text(row, "validation");
+        Count(Statuses, status);
+        Count(Expectations, SmtLiveJson.Text(row, "expected_agreement"));
+        if (status is SmtResultWords.OK or SmtResultWords.OUTPUT_EXCEEDED && verdict != SmtResultWords.NONE)
+            Count(Verdicts, verdict);
+
+        // The report counts the evaluator's classes of the rows a node answered; a problem
+        // without a result or with a standing dispute has none.
+        if (status is not (SmtRunWords.NO_RESULT or SmtRunWords.DISPUTED) && validation is SmtRunWords.VALIDATED or SmtRunWords.PARTIAL or SmtRunWords.FAILED)
+            Count(Classes, validation);
+
         if (status != SmtResultWords.OK)
         {
             NotOkCount++;
@@ -84,14 +99,19 @@ internal sealed class SmtLiveRowScan
         if (SmtLiveJson.Text(row, "expected_agreement") == SmtRunWords.DISAGREE)
         {
             DisagreeingCount++;
-            Keep(Disagreeing, $"[{index}] {id}: verdict {SmtLiveJson.Text(row, "verdict")}, expected {SmtLiveJson.Text(row, "expected")}");
+            Keep(Disagreeing, $"[{index}] {id}: verdict {verdict}, expected {SmtLiveJson.Text(row, "expected")}");
         }
 
-        if (SmtLiveJson.Text(row, "validation") == SmtRunWords.FAILED)
+        if (validation == SmtRunWords.FAILED)
         {
             FailedCount++;
             Keep(Failed, $"[{index}] {id}: {SmtLiveJson.Text(row, "validation_reason")} {SmtLiveJson.Text(row, "validation_detail")} (settled by {SmtLiveJson.Text(row, "settled_by")})");
         }
+    }
+
+    private static void Count(SortedDictionary<string, int> counts, string key)
+    {
+        counts[key] = counts.GetValueOrDefault(key) + 1;
     }
 
     private void Keep(List<string> rows, string row)
@@ -114,6 +134,18 @@ internal sealed class SmtLiveRowScan
 
     /// <summary>The ids of the wanted indices, by index.</summary>
     public Dictionary<int, string> Ids { get; } = [];
+
+    /// <summary>The rows by status, every status counted.</summary>
+    public SortedDictionary<string, int> Statuses { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The verdicts of the rows answered <c>ok</c> or <c>output_exceeded</c>, as the report counts them.</summary>
+    public SortedDictionary<string, int> Verdicts { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The rows by their agreement with the expected verdict.</summary>
+    public SortedDictionary<string, int> Expectations { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The evaluator's classes of the rows a node answered, as the report counts them.</summary>
+    public SortedDictionary<string, int> Classes { get; } = new(StringComparer.Ordinal);
 
     /// <summary>The rows whose status is not <c>ok</c>.</summary>
     public int NotOkCount { get; private set; }

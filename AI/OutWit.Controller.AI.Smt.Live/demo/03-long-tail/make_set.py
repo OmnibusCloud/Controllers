@@ -7,8 +7,9 @@
    benchmarks, Zenodo record 16740866: QF_LIA.tar.zst, 687 MB, and QF_BV.tar.zst, 1.7 GB) once
    each through zstd (the zstd tool on the PATH, or Python's own zstd module), keeps the files the
    list (kit-list.tsv beside this script) names, checks each against its SHA-256 and writes them
-   as <work folder>/problems/<id>.smt2. A file that is already there with its hash is not fetched
-   again; when every file is there nothing is streamed. Nothing of the archives is kept but the
+   as <work folder>/problems/<id>.smt2 (first as <id>.smt2.part, renamed when it is whole). A
+   file that is already there with its hash is not fetched again; when every file is there
+   nothing is streamed. Nothing of the archives is kept but the
    listed files, and none of them is ever committed.
 2. Writes <work folder>/ATTRIBUTION.tsv from each file's own metadata: the id, the path in the
    library, the licence its :license states (the collection's CC BY 4.0 when it states none), its
@@ -18,6 +19,9 @@
 4. `smt-live pack <work folder>/problems --out <work folder>/problems.jsonl`: one row a problem,
    its id the list's, its expected verdict the problem's own :status. Every row must be taken by
    the reader the server reads a set with.
+5. Prints the set's rows, bytes and SHA-256; for the kit's own list (no --list), holds them to
+   the set EXPECTED.md names (SET_SHA256, SET_BYTES): the set a run of the kit is of, the name
+   the provenance gives it. Exits 1 when the set is another.
 
 --tool names the tool; by default the Release build beside this kit
 (bin/Release/net10.0/smt-live, `dotnet build -c Release` in the tool's folder).
@@ -33,6 +37,8 @@ import sys
 import tarfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SET_BYTES = 257_872_798
+SET_SHA256 = "601ba8b9c880d8a5b0c3fcc2dad927e62a2344232dd109a6c1b029e3b167b265"
 DEFAULT_LICENCE = "https://creativecommons.org/licenses/by/4.0/"
 SOURCE_CHARACTERS = 200
 
@@ -94,8 +100,10 @@ def fetch(rows, folder, make_list):
                     if hashlib.sha256(data).hexdigest() != row["sha256"]:
                         print("DIFFERS %s %s" % (row["id"], member.name))
                         continue
-                    with open(os.path.join(folder, row["id"] + ".smt2"), "wb") as handle:
+                    path = os.path.join(folder, row["id"] + ".smt2")
+                    with open(path + ".part", "wb") as handle:
                         handle.write(data)
+                    os.replace(path + ".part", path)
                     missing.discard(member.name)
                     if not missing:
                         break
@@ -139,6 +147,7 @@ def main(argv):
     args = argv[1:]
     tool = default_tool()
     listing = os.path.join(HERE, "kit-list.tsv")
+    own = True
     for flag in ("--tool", "--list"):
         if flag in args:
             at = args.index(flag)
@@ -149,6 +158,7 @@ def main(argv):
                 tool = args[at + 1]
             else:
                 listing = args[at + 1]
+                own = False
             del args[at:at + 2]
     if len(args) != 1:
         print(__doc__, file=sys.stderr)
@@ -195,6 +205,9 @@ def main(argv):
         for chunk in iter(lambda: handle.read(1 << 22), b""):
             digest.update(chunk)
     print("the set: %s, %d rows, %d bytes, SHA-256 %s" % (problems, count, os.path.getsize(problems), digest.hexdigest()))
+    if own and (digest.hexdigest() != SET_SHA256 or os.path.getsize(problems) != SET_BYTES):
+        print("the set is not the kit's %s, %d bytes (EXPECTED.md)" % (SET_SHA256, SET_BYTES), file=sys.stderr)
+        return 1
     return 0
 
 

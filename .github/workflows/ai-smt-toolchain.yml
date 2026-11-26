@@ -2,33 +2,52 @@ name: AI Smt toolchain
 run-name: "AI Smt toolchain: ${{ github.ref_name }}"
 
 # The solver module of the Smt controller: Z3 (the release toolchain/pins.env pins) built for
-# wasm32-wasip1 by the pinned wasi-sdk, with C++ exceptions as WebAssembly exceptions. Two
-# jobs build it, on two runner images, from two different folders, and the bytes are
-# compared. The compare job holds the module and the data asset that carries it to the pins
-# of toolchain/pins.env (the SHA-256 and the size of each): a build that gives another module
-# or another archive fails this workflow. The module is then taken out of the archive, checked
-# (what it imports, its exception tag, no trace of a build machine) and run under the pinned
-# wasmtime command line. The data asset goes out as a workflow artifact with its SHA-256;
-# nothing is released from here. It is not a required check.
+# wasm32-wasip1 by the pinned wasi-sdk, with C++ exceptions as WebAssembly exceptions, by the
+# pinned cmake, make and python3 (build.sh installs them from their pinned downloads; nothing of
+# the runner's own is used). Two jobs build it, on two runner images, from two different
+# folders, and the bytes are compared. The compare job holds the module and the data asset that
+# carries it to the pins of toolchain/pins.env (the SHA-256 and the size of each): a build that
+# gives another module or another archive fails this workflow. The module is then taken out of
+# the archive, checked (what it imports, its exception tag, no trace of a build machine) and run
+# under the pinned wasmtime command line. The data asset goes out as a workflow artifact with
+# its SHA-256; nothing is released from here. It is not a required check.
+#
+# This is the one check that the pins are what the toolchain builds. The tests of the controller
+# ("AI Smt", "AI Smt long tail") do not build: they take the archive of the asset release and
+# hold it, and the module in it, to the same pins.
 #
 # A build takes twenty to thirty minutes on a runner, so what it writes is kept in the Actions
 # cache, under the hash of everything the module is made from (build.sh --inputs: the build
-# script, the two source changes, the pins the build reads) and the runner image. A run that
-# changes none of them takes both modules from the cache, each built once on its own image,
-# and does the rest anew: the notices, the archive, the comparison, the checks, the smoke
-# test. To build anew without changing the build, delete the caches named smt-z3-module-*
-# (Actions, Caches) and run the workflow.
+# script, the two source changes, the pins the build reads, the tools' among them) and the
+# runner image. A run that changes none of them takes both modules from the cache, each built
+# once on its own image, and does the rest anew: the notices, the archive, the comparison, the
+# checks, the smoke test. To build anew without changing the build, delete the caches named
+# smt-z3-module-* (Actions, Caches) and run the workflow.
 #
 # It runs on a pull request, and after a push to main, for a change to the toolchain or to
 # this file; a branch with a pull request is built once, by the pull request's run (another
 # branch is run by hand).
+#
+# The asset release is made by hand, once for each new archive, from a run of this workflow on
+# main that passed (its compare job held the archive to pins.env):
+#
+#   gh run download <run id> --repo OmnibusCloud/Controllers --name smt-z3-wasm --dir asset
+#   . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
+#   echo "$SMT_Z3_WASM_SHA256  asset/smt-z3-wasm.zip" | sha256sum -c -
+#   test "$(wc -c < asset/smt-z3-wasm.zip)" -eq "$SMT_Z3_WASM_SIZE"
+#   gh release create "smt-z3-v$Z3_VERSION" asset/smt-z3-wasm.zip --repo OmnibusCloud/Controllers \
+#     --prerelease --target <the run's commit> --title "Z3 $Z3_VERSION for wasm32-wasip1 (data asset)" \
+#     --notes-file <notes>
+#
+# The notes give the run, its commit, and the SHA-256 and size of the archive and of the three
+# files in it (SHA256SUMS of the artifact; build-info.txt of the run's summary). A published
+# archive is never replaced: a later packing of the same solver is a release of its own
+# (smt-z3-v5.4.1-2), and the controller's project file (its ControllerDataAsset) moves to it.
+# Before a package is pushed, the publish workflow fetches the archive from the release the
+# project file names and holds it to the project file's SHA-256 and size.
 
 on:
   workflow_dispatch:
-  # Called as a job by the workflow that tests the controller ("AI Smt"): the module its tests
-  # run on is the one built and checked here, taken from the cache when nothing of the
-  # toolchain changed.
-  workflow_call:
   push:
     branches: [main]
     paths:
