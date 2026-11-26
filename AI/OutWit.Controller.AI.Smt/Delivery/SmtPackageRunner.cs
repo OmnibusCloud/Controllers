@@ -142,7 +142,7 @@ internal static class SmtPackageRunner
     {
         var budget = new SmtSessionBudget(degree);
         using var turn = budget.EnterAsync(cancellationToken).GetAwaiter().GetResult();
-        return RunAsync(turn, package, problemsPath, Solver(sandbox), resultsPath, problemDone, logger, cancellationToken).GetAwaiter().GetResult();
+        return RunAsync(turn, package, problemsPath, Solver(sandbox, logger), resultsPath, problemDone, logger, cancellationToken).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -210,10 +210,11 @@ internal static class SmtPackageRunner
 
     /// <summary>How a node solves one problem of a package: a session of its own in the process's sandbox.</summary>
     /// <param name="sandbox">The sandbox.</param>
+    /// <param name="logger">The node's own log: a session the host failed outside the solver leaves its exception there.</param>
     /// <returns>The function.</returns>
-    public static Func<SmtProblemData, SmtOptionsData, CancellationToken, SmtSolveOutcome> Solver(SmtSandbox sandbox)
+    public static Func<SmtProblemData, SmtOptionsData, CancellationToken, SmtSolveOutcome> Solver(SmtSandbox sandbox, ILogger logger)
     {
-        return (problem, options, cancellationToken) => SmtSolver.Solve(problem, options, sandbox, null, cancellationToken);
+        return (problem, options, cancellationToken) => SmtSolver.Solve(problem, options, sandbox, null, cancellationToken, logger);
     }
 
     /// <summary>

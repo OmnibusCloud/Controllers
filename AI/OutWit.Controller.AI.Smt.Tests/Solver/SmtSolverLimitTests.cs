@@ -221,6 +221,32 @@ public sealed class SmtSolverLimitTests
     }
 
     [Test]
+    public void AFailureOfTheHostOutsideTheSolverLeavesItsExceptionInTheNodesOwnLogTest()
+    {
+        // The row names the kind of the failure and no more: a machine is not told apart by it.
+        // What threw, and where, is for whoever looks after the node: it is in the node's own log,
+        // with the problem's index, so that the line stands beside the runner's line for the row.
+        var logger = new SmtTestLogger();
+        var problem = SmtGoldenPackages.Indexed(SmtSolverProblems.Check("small", SmtSolverCases.ONE_SOLUTION), 7);
+
+        var solved = SmtSolverRig.SolveInAClosedSandbox(problem, new SmtOptionsData(), logger);
+        var lines = logger.Lines.ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(solved.Words(), Is.EqualTo("node_fault host_fault"), solved.ToString());
+            Assert.That(lines, Has.Count.EqualTo(1), "one line in the node's log");
+            Assert.That(lines.Select(line => line.Level), Has.All.EqualTo(Microsoft.Extensions.Logging.LogLevel.Error));
+            Assert.That(lines.Select(line => line.Exception), Has.All.InstanceOf<ObjectDisposedException>(), "with the exception itself: its type, its text and its stack");
+            Assert.That(lines.Select(line => line.Text), Has.All.Contains("problem 7"));
+
+            Assert.That(solved.Message, Is.EqualTo("the host failed outside the solver: ObjectDisposedException"), "the row still says the kind alone");
+            foreach (var line in lines)
+                Assert.That(solved.Canonical, Does.Not.Contain(line.Exception!.Message), "nothing of the exception's own text travels");
+        });
+    }
+
+    [Test]
     public void AProcessWithoutASandboxSaysSoInFixedWordsTest()
     {
         const string WORDS = "the solver module (wasm/z3-5.4.1.wasm) is not in the controller's folder";

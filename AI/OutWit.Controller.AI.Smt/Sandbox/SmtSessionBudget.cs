@@ -364,21 +364,27 @@ internal sealed class SmtSessionBudget
         return true;
     }
 
+    /// <summary>
+    /// Makes and starts the thread of a session for a problem that was just taken. A machine that
+    /// has no thread to give, whatever it says of it (no memory for the stack, a thread that could
+    /// not start), fails that problem's package and nothing else: the problem was counted as
+    /// running when it was taken and never ran, so the counts are put back here. Nothing may leave
+    /// this method: it runs under the budget's lock, and also on a session's own thread, where an
+    /// exception nobody catches ends the process.
+    /// </summary>
     private void StartWorker(SmtSessionBudgetTurn turn, int index)
     {
-        var thread = m_makeThread(() => Work(turn, index));
-        thread.IsBackground = true;
-        thread.Name = $"{WORKER_NAME}-{m_threads++}";
-        thread.Priority = SmtWorkerPool.WORKER_PRIORITY;
-
         try
         {
+            var thread = m_makeThread(() => Work(turn, index));
+            thread.IsBackground = true;
+            thread.Name = $"{WORKER_NAME}-{m_threads++}";
+            thread.Priority = SmtWorkerPool.WORKER_PRIORITY;
             thread.Start();
             m_workers++;
         }
-        catch (OutOfMemoryException exception)
+        catch (Exception exception)
         {
-            // No thread for the session: the problem was not started, and its package fails.
             m_running--;
             m_runningBytes -= turn.SessionBytes;
             turn.Ended(exception);

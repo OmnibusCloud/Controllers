@@ -126,6 +126,65 @@ public sealed class SmtSandboxTests
 
     #endregion
 
+    #region Scope Tests
+
+    [Test]
+    public void AProcessWithoutTheModuleMakesNoScopeForItsSandboxTest()
+    {
+        // A node without the module asks for its sandbox again at every package and at every
+        // benchmark: an attempt that the cheap checks end leaves nothing in the client's storage.
+        var storage = new SmtTestTempStorage(Path.Combine(m_folder, "storage-without-module"));
+
+        var problem = SmtSolverRig.MakeAndClose(null, storage);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem, Is.EqualTo("the solver module (wasm/z3-5.4.1.wasm) is not in the controller's folder"));
+            Assert.That(storage.Made, Is.Zero, "no scope is made for a sandbox the cheap checks already refuse");
+            Assert.That(storage.Left, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void ASandboxThatCouldNotBeMadeGivesItsScopeBackTest()
+    {
+        // A module with other bytes passes the cheap checks and is refused when it is read: the
+        // scope that was made for the sandbox's files goes back, at every attempt.
+        var storage = new SmtTestTempStorage(Path.Combine(m_folder, "storage-other-module"));
+        var path = Path.Combine(m_folder, "other-bytes.wasm");
+        File.WriteAllBytes(path, [1, 2, 3]);
+
+        var problems = Enumerable.Range(0, 3).Select(_ => SmtSolverRig.MakeAndClose(path, storage)).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problems, Has.All.StartsWith("the solver's sandbox cannot start: InvalidDataException"));
+            Assert.That(storage.Made, Is.EqualTo(3), "a scope an attempt");
+            Assert.That(storage.Left, Is.Empty, "and none of them left behind");
+        });
+    }
+
+    [Test]
+    [Category("Solver")]
+    public void ASandboxThatWasMadeKeepsItsOwnFilesInItsScopeOfTheHostsStorageTest()
+    {
+        var storage = new SmtTestTempStorage(Path.Combine(m_folder, "storage-real-module"));
+        IReadOnlyList<string> open = [];
+
+        var problem = SmtSolverRig.MakeAndClose(SmtSolverModule.Require(), storage, () => open = storage.Left);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem, Is.Null);
+            Assert.That(storage.Made, Is.EqualTo(1));
+            Assert.That(open, Has.Count.EqualTo(1), "the sandbox's own files have one scope while it is open");
+            Assert.That(open, Has.All.StartsWith(storage.RootPath), "inside the host's storage, which on a contributor's machine is the client's folder");
+            Assert.That(storage.Left, Is.Empty, "and the scope goes with the sandbox");
+        });
+    }
+
+    #endregion
+
     #region Locator Tests
 
     [Test]
