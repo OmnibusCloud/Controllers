@@ -124,7 +124,13 @@ text, and the answers).
 Everything in an outcome but the measured wall time is a function of the problem, the options
 and the module: the tests hold forty-one problems to one file of hashes and fuel on Windows,
 Linux and macOS, hold a host with explicit trap checks to one with hardware traps, and hold
-eight sessions at once to the same sessions one by one.
+eight sessions at once to the same sessions one by one. Sixteen more problems are nested as deep
+as the reader takes one (chains of additions, of connectives, of bindings and of conditionals,
+25,000 to 100,000 lists deep): the solver's own code calls itself a level of such a term, and
+the native stack a guest is given holds a number of calls that is the compiler's for the
+machine, so these are the problems on which two machines could have parted. They do not: their
+rows are held to a file of digests and fuel of their own on the three platforms, in both trap
+modes.
 
 ## A package on a node
 

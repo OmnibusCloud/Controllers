@@ -11,10 +11,16 @@ namespace OutWit.Controller.AI.Smt.Tests.Solver;
 /// and how many calls fit the native stack a guest is given is the compiler's matter for the
 /// machine: a row of such a problem is where two honest machines could give two digests.
 /// <para>
-/// The test of the rows states what this machine gives for each case, in both trap modes, in the
-/// test's output: the status, the verdict, the fuel and the row's digest. It compares them with
-/// no other machine's; the workflow runs it on Windows, Linux and macOS, and the three logs side
-/// by side are the comparison.
+/// They do not: every row is the one of a committed file, <c>Fixtures/Solver/deep.tsv</c>
+/// (<see cref="SmtDeepGolden"/>), by its digest and its fuel, in both trap modes. The file was
+/// written once, on one machine; the workflow runs this fixture on Windows, Linux and macOS, and
+/// each of them must give exactly that file. What each platform gives is also stated in the
+/// test's output, a line a row.
+/// </para>
+/// <para>
+/// The file is rewritten on purpose only (another solver module, another command in a session,
+/// another case, another canonical form of a row): run this fixture with the environment
+/// variable <see cref="WRITE_VARIABLE"/> set to <c>1</c>; the golden test is then inconclusive.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -24,8 +30,12 @@ public sealed class SmtSolverDeepNestingTests
 {
     #region Constants
 
+    /// <summary>Set to <c>1</c>, makes the golden test write the golden file instead of holding the run to it.</summary>
+    public const string WRITE_VARIABLE = "WITAI_SMT_WRITE_DEEP";
+
     private const string HARDWARE = "hardware traps";
     private const string EXPLICIT = "explicit traps";
+    private const string ANSWERED = "ok sat";
 
     #endregion
 
@@ -64,18 +74,20 @@ public sealed class SmtSolverDeepNestingTests
 
     #endregion
 
-    #region Row Tests
+    #region Golden Tests
 
     [Test]
-    public void TheRowOfEveryDeepProblemIsStatedForThisPlatformTest()
+    public void TheRowOfEveryDeepProblemIsTheOneOfTheGoldenFileInBothTrapModesTest()
     {
         var both = !SmtSolverRig.ExplicitByDefault();
         if (both)
             SmtSolverRig.WarmExplicit();
         else
-            TestContext.Progress.WriteLine("deep: this test process enforces shadow stacks, so its traps are explicit checks already: one trap mode is stated");
+            TestContext.Progress.WriteLine("deep: this test process enforces shadow stacks, so its traps are explicit checks already: one trap mode is held to the file");
 
-        var rows = 0;
+        var cases = SmtDeepProblems.SHAPES.SelectMany(shape => SmtDeepProblems.DEPTHS.Select(depth => SmtDeepProblems.Id(shape, depth))).ToList();
+        var rows = new Dictionary<string, SmtResultData>();
+        var other = new Dictionary<string, SmtResultData>();
         foreach (var shape in SmtDeepProblems.SHAPES)
         {
             foreach (var depth in SmtDeepProblems.DEPTHS)
@@ -83,28 +95,52 @@ public sealed class SmtSolverDeepNestingTests
                 var id = SmtDeepProblems.Id(shape, depth);
                 var problem = SmtSolverProblems.Check(id, SmtDeepProblems.Of(shape, depth));
 
-                rows += State(id, both ? HARDWARE : EXPLICIT, SmtNodeRig.Row(problem, new SmtOptionsData()));
+                rows[id] = State(id, both ? HARDWARE : EXPLICIT, SmtNodeRig.Row(problem, new SmtOptionsData()));
                 if (both)
-                    rows += State(id, EXPLICIT, SmtNodeRig.Row(problem, new SmtOptionsData(), SmtNodeRig.TICKET, new SmtSolverSetup { ExplicitTraps = true }));
+                    other[id] = State(id, EXPLICIT, SmtNodeRig.Row(problem, new SmtOptionsData(), SmtNodeRig.TICKET, new SmtSolverSetup { ExplicitTraps = true }));
             }
         }
 
-        Assert.That(rows, Is.EqualTo(SmtDeepProblems.SHAPES.Count * SmtDeepProblems.DEPTHS.Count * (both ? 2 : 1)), "a row for every case in every trap mode this process has");
+        if (Environment.GetEnvironmentVariable(WRITE_VARIABLE) == "1")
+        {
+            var written = SmtDeepGolden.Write(cases.Select(id => (id, rows[id].Digest, rows[id].Fuel)));
+            Assert.Inconclusive($"the golden file was written from this run, not compared with it: {written}");
+        }
+
+        var golden = SmtDeepGolden.Read();
+
+        Assert.That(golden.Select(line => line.Id), Is.EqualTo(cases), $"{SmtDeepGolden.FILE} names every case, in the order of the cases");
+        Assert.Multiple(() =>
+        {
+            foreach (var (id, digest, fuel) in golden)
+            {
+                Assert.That(SmtNodeRig.Words(rows[id]), Is.EqualTo(ANSWERED), $"{id}: the solver answers, on every platform: no stack ends it");
+                Assert.That(rows[id].Fuel, Is.EqualTo(fuel), $"{id}: the fuel");
+                Assert.That(rows[id].Digest, Is.EqualTo(digest), $"{id}: the digest of its row");
+                Assert.That(SmtResultDigest.Holds(rows[id]), Is.True, id);
+
+                if (both)
+                {
+                    Assert.That(other[id].Fuel, Is.EqualTo(fuel), $"{id}: the fuel, with explicit trap checks");
+                    Assert.That(other[id].Digest, Is.EqualTo(digest), $"{id}: the digest of its row, with explicit trap checks");
+                }
+            }
+        });
     }
 
     #endregion
 
     #region Tools
 
-    /// <summary>Writes a row's line to the test's output: what the three platforms' logs are compared by.</summary>
-    private static int State(string id, string mode, SmtResultData row)
+    /// <summary>Writes a row's line to the test's output, so that a platform's log says what it gave, and hands the row on.</summary>
+    private static SmtResultData State(string id, string mode, SmtResultData row)
     {
         var code = row.Code.Length > 0 ? $" {row.Code}" : "";
         TestContext.Progress.WriteLine(
             $"deep: {SmtNodeRig.Platform,-10} {mode,-14} {id,-28} status {row.Status}{code} verdict {row.Verdict} reason {row.Reason} "
             + $"fuel {row.Fuel.ToString(CultureInfo.InvariantCulture),12} digest {row.Digest} peak {(row.PeakMemoryBytes >> 20).ToString(CultureInfo.InvariantCulture),4} MiB wall {row.WallMs.ToString(CultureInfo.InvariantCulture),6} ms");
 
-        return 1;
+        return row;
     }
 
     #endregion
