@@ -101,9 +101,12 @@ public sealed partial class SmtOptionsData : ModelBase
     public int MemoryMegabytes { get; set; }
 
     /// <summary>
-    /// <c>sampling_rate</c>: the share of the problems that are run on two machines, 0 to 1. 0
-    /// turns re-execution off and 1 runs every problem twice, so "not set" has no number of its
-    /// own here: a new instance holds the default.
+    /// <c>sampling_rate</c>: the share of the packages that are solved on two machines, 0 to 1. 0
+    /// turns re-execution off and 1 solves every package twice, so "not set" has no number of its
+    /// own here: a new instance holds the default. The share is rounded up to a whole package, so
+    /// any rate above 0 solves one package twice at least: a small set has more of its problems
+    /// twice than the rate says, and a set of one package (up to a package's size) is solved twice
+    /// whole, wherever the pool has two machines.
     /// </summary>
     [ToString]
     [MemoryPackOrder(7)]

@@ -74,6 +74,12 @@ A run whose options are out of range, or name a profile the controller does not 
 refused before anything is sent. The documents state every option as the number the run used,
 never the word "default".
 
+The sampling rate is a share of the packages, not of the problems, rounded up to a whole
+package: any rate above 0 solves one package twice at least, so a small set has more of its
+problems twice than the rate says, and a set of one package (up to a package's size) is solved
+twice whole. Two copies need two machines: on a pool of one, nothing is solved twice and the
+documents say the sampling came out `short`.
+
 ### Before a run
 
 `SmtPreflight` reads the set as a run reads it and says: the rows, taken and refused (by code, the

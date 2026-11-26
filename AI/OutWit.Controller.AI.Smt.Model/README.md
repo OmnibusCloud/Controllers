@@ -314,12 +314,18 @@ element.
 | `ResourceLimit` | `rlimit` | the profile's | 4,294,967,295 | the solver's own counter of work for one check |
 | `HardCapSeconds` | `hard_cap_s` | 60 | 600 | seconds of a reference machine for one problem; the controller turns them into a budget of the solver's work that is the same on every node |
 | `MemoryMegabytes` | `memory_mb` | 1,024 | 4,096 | the most memory of one problem |
-| `SamplingRate` | `sampling_rate` | 0.05 | 1 | the share of the problems that are run on two machines; 0 turns re-execution off, 1 runs every problem twice |
+| `SamplingRate` | `sampling_rate` | 0.05 | 1 | the share of the packages that are solved on two machines; 0 turns re-execution off, 1 solves every package twice |
 
 A number that is 0 and a text that is empty mean "not set: the default". The sampling rate is the
-exception, since 0 is a rate of its own: a new `SmtOptionsData` holds its default.
+exception, since 0 is a rate of its own: a new `SmtOptionsData` holds its default. A run samples
+packages, not problems, and rounds the share up to a whole package: any rate above 0 solves one
+package twice at least, so a small set has more of its problems twice than the rate says, and a
+set of one package (up to a package's size) is solved twice whole, wherever the pool has two
+machines.
 `SmtOptionsRules.Check` gives one sentence for each option that is out of its range, naming it as
-a run's specification does; `SmtOptionsRules.Resolve` gives a copy with the defaults of this
+a run's specification does; `SmtOptionsRules.Readable` gives the options with each one out of
+range at the value that means its default, from the same ranges (a preflight reads a set
+whatever its options say); `SmtOptionsRules.Resolve` gives a copy with the defaults of this
 package filled in (the profile and the resource limit stay as they are: their defaults are the
 controller's and the profile's). A reader takes options that are in range, and refuses to be
 made with others.

@@ -37,13 +37,13 @@ public static class SmtOptionsRules
     /// <summary>The greatest <c>memory_mb</c>.</summary>
     public const int MAX_MEMORY_MEGABYTES = 4_096;
 
-    /// <summary><c>sampling_rate</c> of a new instance of the options: one problem in twenty is run on two machines.</summary>
+    /// <summary><c>sampling_rate</c> of a new instance of the options: one package in twenty is solved on two machines (one at least).</summary>
     public const double DEFAULT_SAMPLING_RATE = 0.05;
 
-    /// <summary>The least <c>sampling_rate</c>: no problem is run twice.</summary>
+    /// <summary>The least <c>sampling_rate</c>: no package is solved twice.</summary>
     public const double MIN_SAMPLING_RATE = 0;
 
-    /// <summary>The greatest <c>sampling_rate</c>: every problem is run twice.</summary>
+    /// <summary>The greatest <c>sampling_rate</c>: every package is solved twice.</summary>
     public const double MAX_SAMPLING_RATE = 1;
 
     /// <summary>

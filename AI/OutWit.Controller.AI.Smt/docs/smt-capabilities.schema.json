@@ -42,7 +42,7 @@
         "rlimit": { "type": "integer", "minimum": 1, "description": "The solver's resource limit of one check: the profile's number." },
         "hard_cap_s": { "type": "integer", "minimum": 1, "description": "Seconds of a reference machine for one problem, turned into fuel at time.fuel_per_second." },
         "memory_mb": { "type": "integer", "minimum": 1, "description": "The solver's own memory ceiling of one problem." },
-        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "The share of the problems run on two machines." }
+        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "The share of the packages solved on two machines, rounded up to a whole package: any rate above 0 solves one package twice at least, so a set of one package is solved twice whole." }
       }
     },
     "ceilings": {
