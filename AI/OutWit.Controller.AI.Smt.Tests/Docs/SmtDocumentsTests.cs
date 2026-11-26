@@ -320,6 +320,7 @@ public sealed class SmtDocumentsTests
             Assert.That(ends.Row("the nodes' rows, or the full models of the settled rows, pass what the server keeps of one run")[1],
                 Is.EqualTo($"the bound's name: `{SmtSettlementBoundException.ROWS}` ({SmtSettlementBounds.MAX_ROWS_BYTES / GIB} GiB of rows) or `{SmtSettlementBoundException.MODELS}` ({SmtSettlementBounds.MAX_MODELS_BYTES / GIB} GiB of full models)"));
             Assert.That(Flat(page), Does.Contain($"a node that reports {Number(SmtSandboxDegree.MIN_RAM_MB)} MiB of memory or more"));
+            Assert.That(Flat(page), Does.Contain($"a set of one package (up to {SmtPackagePlanner.MIN_PACKAGE_PROBLEMS} problems while a run is small) is solved twice whole"));
         });
     }
 

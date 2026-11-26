@@ -141,10 +141,11 @@ type of the model package and is read through the typed SDK only.
 **Progress.** A job's progress (`OverallProgress`, 0 to 1) is the platform's number. It moves with
 the statements of the script (the activities done of the script's) and, inside each of the three
 fan-outs, with what the nodes report of their share (the packages received, then the problems
-done); it is 1 when the job completes. On a run where every node answered, the repair round and the dispute round send
-nothing and pass at once. The server's own work, the split before the first fan-out and the
-settlement after the last (every `sat` model through the evaluator), reports no progress of its
-own: on a large set the number stands still there for minutes. It is no estimate of the time left.
+done); it is 1 when the job completes. On a run where every node answered, the repair round and
+the dispute round send nothing and pass at once. The server's own work, the split before the
+first fan-out and the settlement after the last (every `sat` model through the evaluator), reports
+no progress of its own: on a large set the number stands still there for minutes. It is no
+estimate of the time left.
 
 ### How a job ends
 
@@ -169,9 +170,9 @@ send a package to.
 **Cancel.** A cancelled job has no documents, unless the cancel came after they were written: the
 settlement, which writes them, stops at its next row and writes nothing, as every activity of the
 server's stops at the next package, row or model it reads, its working files going with it; nodes
-hand out no more problems. The packages the run gave out and
-what the fan-outs that ended returned stay in the job's variables, as the platform keeps a job's
-variables (the README's *What the job keeps*).
+hand out no more problems. The packages the run gave out and what the fan-outs that ended returned
+stay in the job's variables, as the platform keeps a job's variables (the README's *What the job
+keeps*).
 
 ## 2. Before a run
 
@@ -205,7 +206,7 @@ the controller's. That is the preflight, and it costs the upload of the set.
 | `Logics`, `OtherLogics` | the taken problems by the logic their `set-logic` names (empty for none), 64 logics at most, and the problems of the others |
 | `Queries`, `Expected` | the taken problems by query, and by expected verdict (`sat`, `unsat`, `none`) |
 | `Stripped` | the commands the sanitizer left out of the taken problems, by name |
-| `Licenses`, `OtherLicenses` | the taken problems by the licence their `:license` names, 64 at most, and the problems of the others |
+| `Licenses`, `OtherLicenses` | the taken problems by the licence their `:license` names (empty for none), 64 at most, and the problems of the others |
 | `OptionProblems` | what is wrong with the options: the sentences of the option table, and the profile's; the set is still read, each such option at its default |
 | `Profile` | the profile a run would use |
 | `ResourceLimit`, `HardCapSeconds`, `Fuel`, `MemoryMegabytes`, `MaxModels`, `Seed`, `SamplingRate` | the budget of a problem as numbers (`Fuel` is the hard cap as the count the sandbox stops at) |
@@ -560,7 +561,7 @@ and [*The codes of a row*](https://github.com/OmnibusCloud/Controllers/blob/main
 | `unknown` for the reason `rlimit` | raise `rlimit`: the check used the solver's counter up |
 | `unknown` for the reason `fuel` | raise `hard_cap_s`: the problem used its hard cap up |
 | `unknown` for the reason `memout` | raise `memory_mb`; a session then needs more memory on a node (the preflight's `SessionMemoryBytes`), and fewer nodes have it |
-| `unknown` for the reason `incomplete` or `other` | nothing in the options: the solver's own word (the row's `reason`); another formulation of the problem |
+| `unknown` for the reason `incomplete` or `other` | nothing in the options: the solver gave up by its own word; another formulation of the problem |
 | `output_exceeded` | the verdict stands and the model is lost: ask for fewer `values` or fewer models |
 | `refused` | fix the row: `code` and `message` say what is wrong |
 | `input_error` | fix the problem: `message` is the solver's own |
@@ -576,14 +577,17 @@ and [*The codes of a row*](https://github.com/OmnibusCloud/Controllers/blob/main
 
 ### When a run is alarming
 
-A run is alarming, and a person must look at it, when any of these is not 0 or is so:
+A run is alarming, and a person must look at it, when:
 
-- the integrity document's `evaluator_solver_disagreements`, `lies`, `disputed` and `no_result`;
-- the report's `expected.disagree` and `validation.classes.failed`;
-- the report's `run.sampling` is `short`.
+- one of the integrity document's `evaluator_solver_disagreements`, `lies`, `disputed` and
+  `no_result` is above 0;
+- one of the report's `expected.disagree` and `validation.classes.failed` is above 0 (or a row of
+  the results says `disagree` or `failed`);
+- the report's `run.sampling` is `short`;
+- the report does not count the rows it was written from (its `statuses`, `verdicts`, `expected`
+  and `validation.classes` against the rows of the results).
 
-And a report that does not count the rows it was written from (its `statuses`, `verdicts`,
-`expected` and `validation.classes` against the rows of the results). Worth showing, and no alarm:
+Worth showing, and no alarm:
 `unsat_one_copy` and `complete_one_copy` (answers on one machine's word), partial classes, unknowns,
 a `binding` other than `bound`, packages a node could not work on and refused results (the repair
 round answers them). The live tool's exit code 3 is this statement.
@@ -884,7 +888,7 @@ two tasks of one package in one fan-out: Grid 1.4.0 and later tells it, and the 
 manifest names Grid 1.4.0 as the scripts' dependency. On a server whose Grid tells nothing, a run
 still completes and compares its copies by digest, but no problem is settled `copies`, and the
 report and the integrity document say `binding: unbound` (`mixed` when some results were told and
-some not). Nothing says before a run which Grid the server has: an application reads `binding`
+some not, `none` when no result came back). Nothing says before a run which Grid the server has: an application reads `binding`
 after it, expects `bound`, and shows anything else as a weaker guarantee.
 
 ### Sampling on small sets
