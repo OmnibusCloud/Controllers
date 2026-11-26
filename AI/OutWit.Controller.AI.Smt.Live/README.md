@@ -83,7 +83,7 @@ variable's name and without its value, before a connection is made.
 
 ## The options of a run
 
-`preflight` and `run` take the options of the controller's options document, by its names. An
+`preflight` and `run` take the options by the names the documents of a run give them. An
 option not given is the controller's default, and so is 0, but for `--rate`: `--rate 0` turns the
 copies off (no package is solved on two machines, and every `unsat` rests on one machine; the
 report says `sampling none`), while `--rate` not given is the default, 0.05.
