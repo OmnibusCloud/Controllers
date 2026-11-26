@@ -22,4 +22,7 @@ internal interface ISmtLiveJob
 
     /// <summary>The job's id.</summary>
     Guid Id { get; }
+
+    /// <summary>The name of the script the job runs.</summary>
+    string Script { get; }
 }

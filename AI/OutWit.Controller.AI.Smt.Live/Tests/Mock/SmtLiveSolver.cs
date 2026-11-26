@@ -3,9 +3,9 @@ namespace OutWit.Controller.AI.Smt.Live.Tests.Mock;
 /// <summary>
 /// The solver module the local runs of the tests solve with: the one the controller's tests run,
 /// <c>@Data/wasm/z3-5.4.1.wasm</c> under their project (gitignored: the archive
-/// <c>smt-z3-wasm.zip</c> of the workflow "AI Smt toolchain", unpacked there). A test that needs it
-/// is ignored, with the reason, when it is not there, and fails on the build server, which unpacks
-/// it before the tests.
+/// <c>smt-z3-wasm.zip</c> of the release the controller's project file names, unpacked there). A
+/// test that needs it is ignored, with the reason, when it is not there, and fails on the build
+/// server, which unpacks it before the tests.
 /// </summary>
 internal static class SmtLiveSolver
 {

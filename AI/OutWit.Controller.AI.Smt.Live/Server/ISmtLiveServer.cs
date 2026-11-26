@@ -28,6 +28,15 @@ internal interface ISmtLiveServer
     Task<ISmtLiveJob> SubmitAsync(string script, IReadOnlyList<object?> parameters, CancellationToken ct);
 
     /// <summary>
+    /// Opens a job by its id, one submitted earlier (by this tool or another): its status is
+    /// read once, so a job the server does not know, or not for this key, is said at once.
+    /// </summary>
+    /// <param name="id">The job's id.</param>
+    /// <param name="ct">Cancels the local call.</param>
+    /// <returns>The job.</returns>
+    Task<ISmtLiveJob> OpenAsync(Guid id, CancellationToken ct);
+
+    /// <summary>
     /// Downloads a blob to a file.
     /// </summary>
     /// <param name="blob">The blob's id.</param>

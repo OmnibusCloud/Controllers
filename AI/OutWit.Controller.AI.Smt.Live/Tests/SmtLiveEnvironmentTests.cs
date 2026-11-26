@@ -47,5 +47,45 @@ public sealed class SmtLiveEnvironmentTests
         Assert.That(SmtLiveEnvironment.KEY_VARIABLE, Is.EqualTo("WITAI_VERIFY_LIVE_KEY"));
     }
 
+    [TestCase("http://server.example", "https://identity.example", SmtLiveEnvironment.SERVER_VARIABLE)]
+    [TestCase("https://server.example", "http://identity.example", SmtLiveEnvironment.IDENTITY_VARIABLE)]
+    [TestCase("ftp://server.example", "https://identity.example", SmtLiveEnvironment.SERVER_VARIABLE)]
+    [TestCase("server.example", "https://identity.example", SmtLiveEnvironment.SERVER_VARIABLE)]
+    [TestCase("https://server.example", "http://192.168.1.10:5000", SmtLiveEnvironment.IDENTITY_VARIABLE)]
+    public void TheKeyGoesToNoAddressThatIsNotHttpsTest(string server, string identity, string named)
+    {
+        var variables = new Dictionary<string, string?>
+        {
+            [SmtLiveEnvironment.SERVER_VARIABLE] = server,
+            [SmtLiveEnvironment.IDENTITY_VARIABLE] = identity,
+            [SmtLiveEnvironment.KEY_VARIABLE] = KEY
+        };
+
+        var environment = SmtLiveEnvironment.Read(name => variables.GetValueOrDefault(name), out var error);
+
+        Assert.That(environment, Is.Null);
+        Assert.That(error, Does.Contain(named).And.Contain("https://"));
+        Assert.That(error, Does.Not.Contain(KEY));
+    }
+
+    [TestCase("http://localhost:5000")]
+    [TestCase("http://127.0.0.1:8080")]
+    [TestCase("http://[::1]:8080")]
+    [TestCase("https://server.example")]
+    public void AnHttpsAddressOrThisMachineForALocalTestIsTakenTest(string address)
+    {
+        var variables = new Dictionary<string, string?>
+        {
+            [SmtLiveEnvironment.SERVER_VARIABLE] = address,
+            [SmtLiveEnvironment.IDENTITY_VARIABLE] = address,
+            [SmtLiveEnvironment.KEY_VARIABLE] = KEY
+        };
+
+        var environment = SmtLiveEnvironment.Read(name => variables.GetValueOrDefault(name), out var error);
+
+        Assert.That(error, Is.Null);
+        Assert.That(environment, Is.Not.Null);
+    }
+
     #endregion
 }

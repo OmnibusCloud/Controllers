@@ -10,14 +10,16 @@
 #
 # Usage: build.sh <out-dir> [<work-dir>]
 #        build.sh --inputs   prints one SHA-256 over what the module is made from (this script,
-#                            the two source changes, the pins it reads) and builds nothing: the
-#                            name a build's output can be kept under
+#                            the two source changes, the pins it reads, the tools' among them)
+#                            and builds nothing: the name a build's output can be kept under
 #
 # The build is reproducible: the same pins give the same bytes, wherever the checkout or the
 # work folder is. The compiler, the linker and the libraries are the pinned SDK's; cmake, make
-# and python3 (Z3's build generates sources with it) are the build machine's. The work folder
-# is mapped out of every file name the compiler writes, the section that names the compiler's
-# own build is removed, and the module is checked for the real folders afterwards.
+# and python3 (Z3's build generates sources with it) are pinned downloads too, installed in the
+# work folder: nothing of the build machine's own is run but the shell, the archive and hash
+# tools, and the C compiler that builds make from its source. The work folder is mapped out of
+# every file name the compiler writes, the section that names the compiler's own build is
+# removed, and the module is checked for the real folders afterwards.
 #
 # A build takes twenty to thirty minutes on four cores. pack.sh makes the data asset from what
 # this script writes.
@@ -32,7 +34,8 @@ if [ "${1:-}" = "--inputs" ]; then
   {
     cat "$HERE/build.sh" "$HERE/patch.py" "$HERE/wasi/scoped_timer.cpp"
     for name in Z3_VERSION Z3_COMMIT Z3_SOURCE_URL Z3_SOURCE_SHA256 Z3_LICENSE_SHA256 Z3_SCOPED_TIMER_SHA256 Z3_HWF_SHA256 \
-                WASI_SDK_VERSION WASI_SDK_URL WASI_SDK_SHA256 WASI_LIBC_COMMIT LLVM_COMMIT; do
+                WASI_SDK_VERSION WASI_SDK_URL WASI_SDK_SHA256 WASI_LIBC_COMMIT LLVM_COMMIT \
+                CMAKE_VERSION CMAKE_URL CMAKE_SHA256 MAKE_VERSION MAKE_URL MAKE_SHA256 PYTHON_VERSION PYTHON_URL PYTHON_SHA256; do
       printf '%s=%s\n' "$name" "${!name}"
     done
   } | sha256sum | cut -d' ' -f1
@@ -68,6 +71,9 @@ fetch() {
 echo "== downloads"
 fetch "$WASI_SDK_URL" "$WASI_SDK_SHA256" "$WORK/wasi-sdk.tar.gz"
 fetch "$Z3_SOURCE_URL" "$Z3_SOURCE_SHA256" "$WORK/z3-source.tar.gz"
+fetch "$CMAKE_URL" "$CMAKE_SHA256" "$WORK/cmake.tar.gz"
+fetch "$MAKE_URL" "$MAKE_SHA256" "$WORK/make.tar.gz"
+fetch "$PYTHON_URL" "$PYTHON_SHA256" "$WORK/python.tar.gz"
 # A download without a pin is hashed and named above, and that is all that is done with it:
 # nothing is unpacked or run before every download has matched its pin.
 if [ "$UNPINNED" -ne 0 ]; then
@@ -75,6 +81,48 @@ if [ "$UNPINNED" -ne 0 ]; then
   exit 3
 fi
 echo "every download matched its pin"
+
+echo "== cmake $CMAKE_VERSION, make $MAKE_VERSION, python3 $PYTHON_VERSION"
+# Each in a folder of its own under the work folder, and first on the PATH: Z3's build finds
+# python3 there, and cmake and make are called by their full names below.
+TOOLS="$WORK/tools"
+if [ ! -x "$TOOLS/cmake/bin/cmake" ]; then
+  rm -rf "$TOOLS/cmake"
+  mkdir -p "$TOOLS/cmake"
+  tar -xzf "$WORK/cmake.tar.gz" -C "$TOOLS/cmake" --strip-components=1
+fi
+if [ ! -x "$TOOLS/python/bin/python3" ]; then
+  rm -rf "$TOOLS/python"
+  mkdir -p "$TOOLS/python"
+  tar -xzf "$WORK/python.tar.gz" -C "$TOOLS/python" --strip-components=1
+fi
+if [ ! -x "$TOOLS/make/bin/make" ]; then
+  rm -rf "$TOOLS/make" "$WORK/make-source"
+  mkdir -p "$TOOLS/make/bin" "$WORK/make-source"
+  tar -xzf "$WORK/make.tar.gz" -C "$WORK/make-source" --strip-components=1
+  # make's own build.sh builds it with no make to start from, from what its configure found.
+  ( cd "$WORK/make-source" && ./configure --quiet --disable-nls --without-guile > "$WORK/make-configure.log" 2>&1 \
+      && sh build.sh > "$WORK/make-build.log" 2>&1 ) \
+    || { echo "make $MAKE_VERSION did not build from its source"; tail -30 "$WORK/make-configure.log" "$WORK/make-build.log" 2> /dev/null; exit 1; }
+  cp "$WORK/make-source/make" "$TOOLS/make/bin/make"
+fi
+export PATH="$TOOLS/python/bin:$TOOLS/cmake/bin:$TOOLS/make/bin:$PATH"
+CMAKE_BIN="$TOOLS/cmake/bin/cmake"
+MAKE_BIN="$TOOLS/make/bin/make"
+# Each tool says the version pins.env names, and python3 is the pinned one.
+tool() {
+  local seen
+  seen="$("$2" --version 2>&1)"
+  seen="${seen%%$'\n'*}"
+  case "$seen" in
+    *" $3") echo "$1: $seen" ;;
+    *) echo "$1 says '$seen', pins.env says $3"; exit 1 ;;
+  esac
+}
+tool cmake "$CMAKE_BIN" "version $CMAKE_VERSION"
+tool make "$MAKE_BIN" "$MAKE_VERSION"
+tool python3 python3 "$PYTHON_VERSION"
+[ "$(command -v python3)" = "$TOOLS/python/bin/python3" ] || { echo "python3 is $(command -v python3), not the pinned one"; exit 1; }
 
 echo "== wasi-sdk $WASI_SDK_VERSION"
 SDK="$WORK/wasi-sdk"
@@ -84,8 +132,6 @@ if [ ! -x "$SDK/bin/clang" ]; then
   tar -xzf "$WORK/wasi-sdk.tar.gz" -C "$SDK" --strip-components=1
 fi
 "$SDK/bin/clang" --version | head -1
-cmake --version | head -1
-python3 --version
 # The notices that travel with the module take the licence texts of wasi-libc and of LLVM's
 # libraries at the commits pins.env names: they must be the commits this SDK was built from.
 for line in "wasi-libc: ${WASI_LIBC_COMMIT:0:12}" "llvm: ${LLVM_COMMIT:0:12}"; do
@@ -148,7 +194,8 @@ rm -rf "$BUILD"
 mkdir -p "$BUILD"
 
 echo "== configure"
-cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
+"$CMAKE_BIN" -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
+  -DCMAKE_MAKE_PROGRAM="$MAKE_BIN" \
   -DCMAKE_TOOLCHAIN_FILE="$SDK/share/cmake/wasi-sdk-p1.cmake" \
   -DWASI_SDK_PREFIX="$SDK" \
   -DCMAKE_SYSROOT="$SDK/share/wasi-sysroot" \
@@ -158,7 +205,7 @@ cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
   -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS_COMMON" \
   -DCMAKE_CXX_STANDARD_LIBRARIES="$LIBS_COMMON" \
   -DCMAKE_C_STANDARD_LIBRARIES="$LIBS_COMMON" \
-  -DPython3_EXECUTABLE="$(command -v python3)" \
+  -DPython3_EXECUTABLE="$TOOLS/python/bin/python3" \
   -DBUILD_SHARED_LIBS=OFF \
   -DZ3_SINGLE_THREADED=ON \
   -DZ3_POLLING_TIMER=OFF \
@@ -179,8 +226,8 @@ cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
 echo "== build ($(nproc) jobs)"
 # On a failure the build runs once more ignoring errors (-i), so that every translation unit
 # that fails, in every library, is reported in one run.
-if ! make -C "$BUILD" -k -j"$(nproc)" shell > "$WORK/make.log" 2>&1; then
-  make -C "$BUILD" -i -j"$(nproc)" shell > "$WORK/make-all.log" 2>&1 || true
+if ! "$MAKE_BIN" -C "$BUILD" -k -j"$(nproc)" shell > "$WORK/make.log" 2>&1; then
+  "$MAKE_BIN" -C "$BUILD" -i -j"$(nproc)" shell > "$WORK/make-all.log" 2>&1 || true
   echo "== the build failed; every error of a run that ignores errors:"
   grep -E "error:|undefined symbol|wasm-ld:" "$WORK/make-all.log" | sed "s|$WORK/||g" | sort | uniq -c | sort -rn | head -150
   echo "== the last lines of the first run"
@@ -217,6 +264,7 @@ SIZE="$(wc -c < "$OUT/$MODULE" | tr -d ' ')"
   echo "z3 $Z3_VERSION ($Z3_COMMIT), wasm32-wasip1"
   echo "source: $Z3_SOURCE_URL (SHA-256 $Z3_SOURCE_SHA256)"
   echo "wasi-sdk $WASI_SDK_VERSION: $("$SDK/bin/clang" --version | head -1)"
+  echo "tools: $("$CMAKE_BIN" --version | head -1), $("$MAKE_BIN" --version | head -1), $(python3 --version 2>&1)"
   echo "cflags: ${CFLAGS_COMMON//"$WORK"/<work>}"
   echo "ldflags: $LDFLAGS_COMMON $LIBS_COMMON"
   echo "cmake: Release, -DBUILD_SHARED_LIBS=OFF -DZ3_SINGLE_THREADED=ON -DZ3_POLLING_TIMER=OFF -DZ3_USE_LIB_GMP=OFF -DZ3_LINK_TIME_OPTIMIZATION=OFF"

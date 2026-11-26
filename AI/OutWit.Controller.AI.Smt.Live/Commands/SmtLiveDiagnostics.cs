@@ -59,7 +59,21 @@ internal sealed class SmtLiveDiagnostics
         var job = await m_server.SubmitAsync(SCRIPT, [], ct);
         m_output.WriteLine($"{SCRIPT} submitted: job {job.Id}");
 
-        var end = await job.WaitAsync(new SmtLiveProgress(m_output, "progress"), ct);
+        SmtLiveJobEnd end;
+        try
+        {
+            end = await job.WaitAsync(new SmtLiveProgress(m_output, "progress"), ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            m_output.WriteLine($"{SmtLiveRunSummary.LOUD}stopped (Ctrl+C) while waiting for the job {job.Id}: it goes on on the server, where it runs on the server alone");
+            return SmtLiveExitCodes.STOPPED;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            m_output.WriteLine($"{SmtLiveRunSummary.LOUD}the job's status could not be read: {exception.Message}; the job {job.Id} goes on on the server, where it runs on the server alone");
+            return SmtLiveExitCodes.ERROR;
+        }
         if (!end.Completed)
         {
             m_output.WriteLine($"  {end.Status} after {end.Duration:hh\\:mm\\:ss}: {end.Error}");

@@ -79,6 +79,31 @@ internal static class SmtLiveFixtures
         File.WriteAllText(path, string.Join("\n", lines) + "\n");
     }
 
+    /// <summary>
+    /// Makes a copied run's folder the run of another set: its provenance and its measurement
+    /// (<c>local.json</c> or <c>fleet.json</c>, when there is one) name the set given.
+    /// </summary>
+    /// <param name="folder">The folder.</param>
+    /// <param name="sha256">The set's SHA-256.</param>
+    /// <param name="bytes">Its bytes.</param>
+    /// <param name="rows">Its rows.</param>
+    public static void SetOfRun(string folder, string sha256, long bytes, long rows)
+    {
+        Edit(Path.Combine(folder, SmtLiveDocuments.PROVENANCE.File), root =>
+        {
+            root["problem_set"]!["sha256"] = sha256;
+            root["problem_set"]!["bytes"] = bytes;
+            root["problem_set"]!["rows"] = rows;
+        });
+
+        foreach (var measurement in new[] { "local.json", "fleet.json" })
+        {
+            var path = Path.Combine(folder, measurement);
+            if (File.Exists(path))
+                Edit(path, root => root["problem_set"]!["sha256"] = sha256);
+        }
+    }
+
     /// <summary>The repository's root: the folder that holds the solution.</summary>
     /// <returns>Its path.</returns>
     public static string RepositoryRoot()

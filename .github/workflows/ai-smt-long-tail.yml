@@ -12,11 +12,16 @@ run-name: "AI Smt long tail: ${{ github.event.pull_request.title || github.ref_n
 #   them with smt-live, which reads every row back with the reader the server reads a set with:
 #   every one must be taken. The sample the list marks travels to the next job as an artifact.
 # - sample: the forty problems of the sample, solved in the controller's sandbox under the kit's
-#   options (SmtLongTailSampleTests): every verdict the problem's :status or a budget's end, no
-#   model failed, and the share the options decide as the test writes it. Never the whole kit.
+#   options (SmtLongTailSampleTests): every verdict the problem's :status or a budget's end, every
+#   model validated, and the fuel and the share the options decide as the test writes them. Never
+#   the whole kit. The solver module is the archive of the release the controller's project file
+#   names, held with the module in it to the toolchain's pins, as in "AI Smt".
 #
-# The streams cost minutes and the sample a quarter of an hour, so the workflow runs when the
-# kit or this file changes, and on demand.
+# The streams cost minutes and the sample a quarter of an hour. The workflow runs, besides on
+# demand, when what its tests hold can change: the kit and its test, the controller (the solver,
+# the sandbox's options, the settlement), the wasm host it is built with, the model package (the
+# reader and the sanitizer every file goes through), the module's pins, the pinned engine library,
+# and smt-live's pack and project, which make the set.
 
 on:
   workflow_dispatch:
@@ -24,6 +29,14 @@ on:
     paths:
       - 'AI/OutWit.Controller.AI.Smt.Live/demo/03-long-tail/**'
       - 'AI/OutWit.Controller.AI.Smt.Tests/Kit/**'
+      - 'AI/OutWit.Controller.AI.Smt/**'
+      - 'AI/OutWit.Controller.AI.Smt.Model/**'
+      - 'AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env'
+      - 'AI/OutWit.Controller.AI.Smt.Live/Pack/**'
+      - 'AI/OutWit.Controller.AI.Smt.Live/OutWit.Controller.AI.Smt.Live.csproj'
+      - 'AI/Shared/Wasm/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env'
       - '.github/workflows/ai-smt-long-tail.yml'
 
 # The jobs read the repository and nothing else: they build and test, and publish nothing.
@@ -41,16 +54,24 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
+      # A discovery that finds no test fails (the runner's Python 3.10 would exit 0 for none).
       - name: The kit's scripts
         shell: bash
-        run: python3 -I -m unittest discover -v -s "$KIT/tests" -t "$KIT/tests"
+        run: |
+          set -o pipefail
+          python3 -I -m unittest discover -v -s "$KIT/tests" -t "$KIT/tests" 2>&1 | tee "$RUNNER_TEMP/kit.log"
+          grep -E "^Ran [1-9][0-9]* tests? in " "$RUNNER_TEMP/kit.log" || { echo "::error::no test of the kit's scripts ran"; exit 1; }
 
   read:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
@@ -87,19 +108,16 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # The solver module, built or taken from the cache by the toolchain's own workflow, named by the
-  # commit "AI Smt" names it by.
-  module:
-    uses: OmnibusCloud/Controllers/.github/workflows/ai-smt-toolchain.yml@4157a5f785ccdd66e78434d4fee9da6f77982d49 # v0.1.0
-
   sample:
-    needs: [module, read]
+    needs: read
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
       TESTS: AI/OutWit.Controller.AI.Smt.Tests
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
@@ -115,18 +133,17 @@ jobs:
         shell: bash
         run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
 
-      - name: The solver module's archive
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: smt-z3-wasm
-          path: AI/OutWit.Controller.AI.Smt.Tests/@Data/.downloads
-
+      # The archive of the release the project file names, held with the module in it to the pins.
       - name: The solver module under the tests
         shell: bash
         run: |
           . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
           data="$TESTS/@Data"
           zip="$data/.downloads/smt-z3-wasm.zip"
+          url="$(grep -A3 '<ControllerDataAsset Include="smt-z3-wasm">' AI/OutWit.Controller.AI.Smt/OutWit.Controller.AI.Smt.csproj | sed -n 's|.*<Uri>gh-release://\([^/]*\)/\([^/]*\)/\([^/]*\)/\([^<]*\)</Uri>.*|https://github.com/\1/\2/releases/download/\3/\4|p')"
+          [ -n "$url" ] || { echo "::error::the project file names no release of smt-z3-wasm"; exit 1; }
+          mkdir -p "$data/.downloads"
+          curl -fsSL --retry 3 -o "$zip" "$url"
           echo "$SMT_Z3_WASM_SHA256  $zip" | sha256sum -c -
           python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$data"
           echo "$Z3_MODULE_SHA256  $data/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
@@ -144,8 +161,18 @@ jobs:
       # The log states each problem's verdict, its fuel as seconds of the reference machine, its
       # wall time here and the peak of the solver's memory, against the time Z3 took at the
       # competition. The test holds each file to the SHA-256 of the list again.
+      # Every test the filter selects runs and passes, and it selects at least one.
       - name: Solve the sample
         shell: bash
         env:
           WITAI_SMT_LONG_TAIL_DIR: ${{ runner.temp }}/long-tail-sample
-        run: dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=LongTail" --logger "console;verbosity=normal"
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/long-tail.log"
+          dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=LongTail" --logger "console;verbosity=normal" | tee "$log"
+          total="$(sed -n 's/^ *Total tests: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          if [ "${total:-0}" -eq 0 ] || [ "${passed:-0}" != "$total" ]; then
+            echo "::error::the filter Category=LongTail ran ${total:-no} test(s), ${passed:-none} of them passed: it must select at least one, and run every one it selects"
+            exit 1
+          fi

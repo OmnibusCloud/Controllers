@@ -9,10 +9,13 @@ run-name: "AI Smt: ${{ github.event.pull_request.title || github.ref_name }}"
 # problems are held to one committed file of digests and fuel on all three platforms, which is
 # the proof that a problem gives the same answer, the same model and the same cost everywhere.
 #
-# The module is built by the workflow "AI Smt toolchain", which this one calls as a job: two
-# builds compared byte for byte and held to the toolchain's pins, taken from the cache when
-# nothing of the toolchain changed. The test jobs take its archive, hold it to the pins again
-# and unpack the module where the tests look for it; nothing of it is committed.
+# The module is the archive of the asset release the controller's project file names (its
+# ControllerDataAsset smt-z3-wasm, the very file a node is sent): each test job downloads it,
+# holds it and the module in it to the toolchain's pins (pins.env) and unpacks the module where
+# the tests look for it; nothing of it is committed. That the pins are what the toolchain builds
+# is the workflow "AI Smt toolchain"'s own check (two builds compared byte for byte and held to
+# the pins), run when the toolchain or its pins change; a pull request here does not wait for it,
+# nor for a rebuild when its cache is gone.
 #
 # One job more solves real problems: a slice of the SMT-LIB release, named by a committed list
 # of paths and hashes, fetched from the collection's archives and never committed.
@@ -20,6 +23,10 @@ run-name: "AI Smt: ${{ github.event.pull_request.title || github.ref_name }}"
 # The run of a problem set end to end (SmtRun through the engine with in-process nodes, honest
 # and lying) is part of the test jobs. Its load test, ten thousand problems with the memory and
 # every payload measured, is a job of its own on Linux.
+#
+# A job that runs tests by a filter fails when the filter ran none, or skipped one: a renamed
+# category or a fixture ignored as a whole does not pass for green. The Python scripts of the
+# known-answers kit (its set, its check, the slice fetcher) have a job of their own.
 
 on:
   workflow_dispatch:
@@ -27,6 +34,8 @@ on:
     paths:
       - 'AI/OutWit.Controller.AI.Smt*/**'
       - 'AI/Shared/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env'
       - 'Grid/**'
       - 'Variables/**'
       - 'Build/**'
@@ -38,6 +47,8 @@ on:
     paths:
       - 'AI/OutWit.Controller.AI.Smt*/**'
       - 'AI/Shared/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env'
       - 'Grid/**'
       - 'Variables/**'
       - 'Build/**'
@@ -54,16 +65,7 @@ env:
   DOTNET_NOLOGO: 1
 
 jobs:
-  # The solver module, built or taken from the cache, compared, checked and run by the
-  # toolchain's own workflow; its archive is the artifact smt-z3-wasm of this run. The workflow
-  # is named by a commit, as every action of the repository is (a test holds every "uses" to
-  # that form): the commit that made it callable. The version beside it is the controller's at
-  # that commit. After a change to the toolchain's workflow the commit here is moved to it.
-  module:
-    uses: OmnibusCloud/Controllers/.github/workflows/ai-smt-toolchain.yml@4157a5f785ccdd66e78434d4fee9da6f77982d49 # v0.1.0
-
   tests:
-    needs: module
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +74,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # The SDK global.json pins, exactly.
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
@@ -109,20 +113,19 @@ jobs:
         shell: bash
         run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
 
-      - name: The solver module's archive
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: smt-z3-wasm
-          path: AI/OutWit.Controller.AI.Smt.Tests/@Data/.downloads
-
-      # The archive and the module in it are the ones toolchain/pins.env pins, or nothing runs:
-      # the controller holds the module to the same hash once more before it compiles it.
+      # The archive of the release the project file names, held with the module in it to the ones
+      # toolchain/pins.env pins, or nothing runs: the controller holds the module to the same hash
+      # once more before it compiles it.
       - name: The solver module under the tests
         shell: bash
         run: |
           . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
           data=AI/OutWit.Controller.AI.Smt.Tests/@Data
           zip="$data/.downloads/smt-z3-wasm.zip"
+          url="$(grep -A3 '<ControllerDataAsset Include="smt-z3-wasm">' AI/OutWit.Controller.AI.Smt/OutWit.Controller.AI.Smt.csproj | sed -n 's|.*<Uri>gh-release://\([^/]*\)/\([^/]*\)/\([^/]*\)/\([^<]*\)</Uri>.*|https://github.com/\1/\2/releases/download/\3/\4|p')"
+          [ -n "$url" ] || { echo "::error::the project file names no release of smt-z3-wasm"; exit 1; }
+          mkdir -p "$data/.downloads"
+          curl -fsSL --retry 3 -o "$zip" "$url"
           sha() { if command -v sha256sum > /dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
           [ "$(sha "$zip")" = "$SMT_Z3_WASM_SHA256" ] || { echo "::error::smt-z3-wasm.zip hashes to $(sha "$zip"), not the pinned $SMT_Z3_WASM_SHA256"; exit 1; }
           if command -v python3 > /dev/null; then py=python3; else py=python; fi
@@ -175,6 +178,8 @@ jobs:
         run: |
           set -o pipefail
           dotnet test AI/OutWit.Controller.AI.Smt.Tests/OutWit.Controller.AI.Smt.Tests.csproj -c Release --no-build --filter "Category!=Slice&Category!=Load" --logger "console;verbosity=normal" | tee smt-tests.log
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' smt-tests.log | tail -1)"
+          [ "${passed:-0}" -gt 0 ] || { echo "::error::the filter ran no test"; exit 1; }
 
       # The filter held: above the adapter's limit of selected tests it would run the whole
       # assembly (smt.runsettings raises the limit), and the slice's and the load test's tests,
@@ -201,8 +206,11 @@ jobs:
       - name: The tests of smt-live
         shell: bash
         run: |
+          set -o pipefail
           dotnet build AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release
-          dotnet test AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release --no-build --filter "Category!=Slice" --logger "console;verbosity=normal"
+          dotnet test AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release --no-build --filter "Category!=Slice" --logger "console;verbosity=normal" | tee smt-live-tests.log
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' smt-live-tests.log | tail -1)"
+          [ "${passed:-0}" -gt 0 ] || { echo "::error::the filter ran no test"; exit 1; }
 
       # smt-live for a machine without .NET, as the comparative test's local side runs it: a
       # self-contained folder for this runner's platform with the controller's pinned data assets
@@ -272,13 +280,14 @@ jobs:
   # are kept between runs under the hash of the list. Here a problem that is missing is a
   # failure, not a skip.
   slice:
-    needs: module
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
       TESTS: AI/OutWit.Controller.AI.Smt.Tests
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
@@ -315,18 +324,17 @@ jobs:
         shell: bash
         run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
 
-      - name: The solver module's archive
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: smt-z3-wasm
-          path: AI/OutWit.Controller.AI.Smt.Tests/@Data/.downloads
-
+      # The archive of the release the project file names, held with the module in it to the pins.
       - name: The solver module under the tests
         shell: bash
         run: |
           . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
           data="$TESTS/@Data"
           zip="$data/.downloads/smt-z3-wasm.zip"
+          url="$(grep -A3 '<ControllerDataAsset Include="smt-z3-wasm">' AI/OutWit.Controller.AI.Smt/OutWit.Controller.AI.Smt.csproj | sed -n 's|.*<Uri>gh-release://\([^/]*\)/\([^/]*\)/\([^/]*\)/\([^<]*\)</Uri>.*|https://github.com/\1/\2/releases/download/\3/\4|p')"
+          [ -n "$url" ] || { echo "::error::the project file names no release of smt-z3-wasm"; exit 1; }
+          mkdir -p "$data/.downloads"
+          curl -fsSL --retry 3 -o "$zip" "$url"
           echo "$SMT_Z3_WASM_SHA256  $zip" | sha256sum -c -
           python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$data"
           echo "$Z3_MODULE_SHA256  $data/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
@@ -339,15 +347,32 @@ jobs:
       # scripts, the fuel, and how long each part took on this runner.
       - name: Test
         shell: bash
-        run: dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Slice" --logger "console;verbosity=normal"
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/slice.log"
+          dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Slice" --logger "console;verbosity=normal" | tee "$log"
+          total="$(sed -n 's/^ *Total tests: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          if [ "${total:-0}" -eq 0 ] || [ "${passed:-0}" != "$total" ]; then
+            echo "::error::the filter Category=Slice ran ${total:-no} test(s), ${passed:-none} of them passed: it must select at least one, and run every one it selects"
+            exit 1
+          fi
 
       # smt-live's local run on a handful of the slice (the two fastest of each answer in QF_LIA
       # and QF_BV), packed by its pack: every verdict the list's.
       - name: The slice test of smt-live
         shell: bash
         run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/live-slice.log"
           dotnet build AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release
-          dotnet test AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release --no-build --filter "Category=Slice" --logger "console;verbosity=normal"
+          dotnet test AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release --no-build --filter "Category=Slice" --logger "console;verbosity=normal" | tee "$log"
+          total="$(sed -n 's/^ *Total tests: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          if [ "${total:-0}" -eq 0 ] || [ "${passed:-0}" != "$total" ]; then
+            echo "::error::the filter Category=Slice ran ${total:-no} test(s), ${passed:-none} of them passed: it must select at least one, and run every one it selects"
+            exit 1
+          fi
 
   # The model evaluator against the solver itself, by volume: closed terms generated from a
   # fixed seed for each theory (integer and real arithmetic, linear and not, bit-vectors, arrays,
@@ -356,7 +381,6 @@ jobs:
   # above run a few hundred of them on each platform; this one runs thousands. The log states
   # the totals of each theory: decided and agreed, partial by reason, disagreements.
   differential:
-    needs: module
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:
@@ -364,6 +388,8 @@ jobs:
       SMT_DIFFERENTIAL_TERMS: 600
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
@@ -379,18 +405,17 @@ jobs:
         shell: bash
         run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
 
-      - name: The solver module's archive
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: smt-z3-wasm
-          path: AI/OutWit.Controller.AI.Smt.Tests/@Data/.downloads
-
+      # The archive of the release the project file names, held with the module in it to the pins.
       - name: The solver module under the tests
         shell: bash
         run: |
           . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
           data="$TESTS/@Data"
           zip="$data/.downloads/smt-z3-wasm.zip"
+          url="$(grep -A3 '<ControllerDataAsset Include="smt-z3-wasm">' AI/OutWit.Controller.AI.Smt/OutWit.Controller.AI.Smt.csproj | sed -n 's|.*<Uri>gh-release://\([^/]*\)/\([^/]*\)/\([^/]*\)/\([^<]*\)</Uri>.*|https://github.com/\1/\2/releases/download/\3/\4|p')"
+          [ -n "$url" ] || { echo "::error::the project file names no release of smt-z3-wasm"; exit 1; }
+          mkdir -p "$data/.downloads"
+          curl -fsSL --retry 3 -o "$zip" "$url"
           echo "$SMT_Z3_WASM_SHA256  $zip" | sha256sum -c -
           python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$data"
           echo "$Z3_MODULE_SHA256  $data/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
@@ -401,20 +426,30 @@ jobs:
 
       - name: Test
         shell: bash
-        run: dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Differential" --logger "console;verbosity=normal"
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/differential.log"
+          dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Differential" --logger "console;verbosity=normal" | tee "$log"
+          total="$(sed -n 's/^ *Total tests: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          if [ "${total:-0}" -eq 0 ] || [ "${passed:-0}" != "$total" ]; then
+            echo "::error::the filter Category=Differential ran ${total:-no} test(s), ${passed:-none} of them passed: it must select at least one, and run every one it selects"
+            exit 1
+          fi
 
   # Ten thousand small problems through SmtRun on three in-process nodes at the default sampling
   # rate, with the memory and every payload measured and held to bounds (SmtRunLoadTests). The log
   # states the time, the problems a second, the high-water marks of the heap and what every
   # message and every variable carried.
   load:
-    needs: module
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     env:
       TESTS: AI/OutWit.Controller.AI.Smt.Tests
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
@@ -430,18 +465,17 @@ jobs:
         shell: bash
         run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
 
-      - name: The solver module's archive
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: smt-z3-wasm
-          path: AI/OutWit.Controller.AI.Smt.Tests/@Data/.downloads
-
+      # The archive of the release the project file names, held with the module in it to the pins.
       - name: The solver module under the tests
         shell: bash
         run: |
           . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
           data="$TESTS/@Data"
           zip="$data/.downloads/smt-z3-wasm.zip"
+          url="$(grep -A3 '<ControllerDataAsset Include="smt-z3-wasm">' AI/OutWit.Controller.AI.Smt/OutWit.Controller.AI.Smt.csproj | sed -n 's|.*<Uri>gh-release://\([^/]*\)/\([^/]*\)/\([^/]*\)/\([^<]*\)</Uri>.*|https://github.com/\1/\2/releases/download/\3/\4|p')"
+          [ -n "$url" ] || { echo "::error::the project file names no release of smt-z3-wasm"; exit 1; }
+          mkdir -p "$data/.downloads"
+          curl -fsSL --retry 3 -o "$zip" "$url"
           echo "$SMT_Z3_WASM_SHA256  $zip" | sha256sum -c -
           python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$data"
           echo "$Z3_MODULE_SHA256  $data/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
@@ -452,4 +486,33 @@ jobs:
 
       - name: Load
         shell: bash
-        run: dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Load" --logger "console;verbosity=detailed"
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/load.log"
+          dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Load" --logger "console;verbosity=detailed" | tee "$log"
+          total="$(sed -n 's/^ *Total tests: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          passed="$(sed -n 's/^ *Passed: *\([0-9]*\).*/\1/p' "$log" | tail -1)"
+          if [ "${total:-0}" -eq 0 ] || [ "${passed:-0}" != "$total" ]; then
+            echo "::error::the filter Category=Load ran ${total:-no} test(s), ${passed:-none} of them passed: it must select at least one, and run every one it selects"
+            exit 1
+          fi
+
+  # The Python scripts of the known-answers kit (AI/OutWit.Controller.AI.Smt.Live/demo/
+  # 01-known-answers): make_set.py, check.py and the slice fetcher the kit and the slice job use,
+  # on made-up sets and runs; no network. A discovery that finds no test fails.
+  kits:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      KIT: AI/OutWit.Controller.AI.Smt.Live/demo/01-known-answers
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: The known-answers kit's scripts
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 -I -m unittest discover -v -s "$KIT/tests" -t "$KIT/tests" 2>&1 | tee "$RUNNER_TEMP/kit.log"
+          grep -E "^Ran [1-9][0-9]* tests? in " "$RUNNER_TEMP/kit.log" || { echo "::error::no test of the kit's scripts ran"; exit 1; }

@@ -13,6 +13,13 @@ namespace OutWit.Controller.AI.Smt.Live.Tests.Commands;
 [TestFixture]
 public sealed class SmtLiveComparativeTests
 {
+    #region Constants
+
+    /// <summary>The set of the small fleet run, as its measurement names it.</summary>
+    private const string SMALL_SET = "8fcb09369a7fc3a9ed2d59eac093769fdd52d0d66359de1cf83244dca707fd08";
+
+    #endregion
+
     #region Fields
 
     private string m_root = null!;
@@ -35,6 +42,7 @@ public sealed class SmtLiveComparativeTests
         File.Copy(Measured("local.json"), Path.Combine(m_local, SmtLiveLocalFacts.FILE));
         File.Copy(Measured("fleet.json"), Path.Combine(m_fleet, SmtLiveFleetFacts.FILE));
         File.Copy(Measured("fleet-small.json"), Path.Combine(m_small, SmtLiveFleetFacts.FILE));
+        SmtLiveFixtures.SetOfRun(m_small, SMALL_SET, 3342, 2);
         m_output = new StringWriter();
     }
 
@@ -103,7 +111,7 @@ public sealed class SmtLiveComparativeTests
         var output = m_output.ToString();
         Assert.Multiple(() =>
         {
-            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.FAILED));
+            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.DIFFER));
             Assert.That(output, Does.Contain("digests: 1 of 3 equal, !!! 2 DIFFER"));
             Assert.That(output, Does.Contain("flips (sat, unsat and unknown against each other): 1"));
             Assert.That(output, Does.Contain("[0] a: digests differ: local sat aaaaaaaaaaaaaaaa fuel 3400, fleet unsat dddddddddddddddd fuel 3400"));
@@ -115,9 +123,9 @@ public sealed class SmtLiveComparativeTests
     [Test]
     public void RunsOfAnotherSetOrModuleOrOptionsAreNotTheSameThingTest()
     {
+        SmtLiveFixtures.SetOfRun(m_fleet, new string('6', 64), 512, 4);
         SmtLiveFixtures.Edit(Path.Combine(m_fleet, SmtLiveDocuments.PROVENANCE.File), root =>
         {
-            root["problem_set"]!["sha256"] = new string('6', 64);
             root["profile"]!["module_sha256"] = new string('7', 64);
             root["options"]!["hard_cap_s"] = 100;
             root["options"]!["sampling_rate"] = 0.05;
@@ -128,12 +136,13 @@ public sealed class SmtLiveComparativeTests
         var output = m_output.ToString();
         Assert.Multiple(() =>
         {
-            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.FAILED));
+            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.DIFFER));
             Assert.That(output, Does.Contain("!!! set       : NOT THE SAME"));
             Assert.That(output, Does.Contain("!!! module    : NOT THE SAME"));
             Assert.That(output, Does.Contain("!!! options   : DIFFER: options.hard_cap_s"));
             Assert.That(output, Does.Not.Contain("sampling_rate:"), "the sampling rate is not a difference of what ran");
             Assert.That(output, Does.Contain("THE TWO RUNS DIFFER in what they ran"));
+            Assert.That(output, Does.Contain("crossover : not computed: the two runs did not run the same thing").And.Not.Contain("finishes first above"));
         });
     }
 

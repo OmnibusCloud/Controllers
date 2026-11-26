@@ -94,7 +94,9 @@ Fuel is a count, so what the first whole run showed, every later run of the same
 same options must show again, on any fleet: the same problems decided, the same ones stopped, the
 same fuel each; `compare` holds two runs to that. The kit has been run whole twice, on one Apple
 silicon machine and on the test fleet's Windows x64 nodes, and every one of the 1,960 rows had the
-same digest on both (below). So these are the set's numbers under these options:
+same digest on both (below). So these are the set's numbers under these options, and `check.py`
+holds a run of the kit's list to every one of them (with the set's SHA-256 above and the pinned
+module):
 
 | | Must be |
 |---|---|

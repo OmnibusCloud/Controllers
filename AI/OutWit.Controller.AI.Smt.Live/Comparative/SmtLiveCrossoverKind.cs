@@ -15,6 +15,6 @@ internal enum SmtLiveCrossoverKind
     /// <summary>This machine finishes first at every size a set may have.</summary>
     LocalAlways,
 
-    /// <summary>The fleet finishes first at every size.</summary>
+    /// <summary>The fleet finishes first at every size a set may have.</summary>
     FleetAlways
 }

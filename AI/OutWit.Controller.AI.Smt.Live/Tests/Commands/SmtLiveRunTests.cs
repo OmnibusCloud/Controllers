@@ -150,7 +150,7 @@ public sealed class SmtLiveRunTests
 
         Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.FAILED));
         Assert.That(m_output.ToString(), Does.Contain("report.json      ").And.Contain("DOES NOT HOLD TO smt-report.schema.json").And.Contain("$: lacks 'verdicts'"));
-        Assert.That(m_output.ToString(), Does.Contain("result   : FAILED: a document does not hold to its schema"));
+        Assert.That(m_output.ToString(), Does.Contain("result   : FAILED: report.json does not hold to its schema"));
     }
 
     [Test]

@@ -11,6 +11,7 @@ never packed or published.
 | `diagnostics` | yes | runs `SmtRuntimeDiagnostics`; prints what the server's controller carries and can do, and the capabilities document, held to its schema |
 | `preflight` | yes | uploads a problem set, runs `SmtPreflight`; prints what the set and the options come to; nothing is sent to a node |
 | `run` | yes | uploads a problem set, runs `SmtRun`, waits with its progress, downloads the four documents, holds each to its schema, prints the summary |
+| `fetch` | yes | the same for a job of `SmtRun` submitted earlier, by its id: waits while it runs, downloads, checks and summarises its documents |
 | `compare` | no | two folders `run` wrote, for one problem set: the same settled answers and the same provenance, or every difference |
 | `pack` | no | a folder of SMT-LIB files into a problem set, read back as the server reads it |
 | `local` | no | a problem set on this machine alone, by the controller's own code: the four documents of a run and `local.json`, what it measured |
@@ -42,8 +43,8 @@ bin/Release/net10.0/smt-live local demo/02-eight-queens/problems.jsonl
 ```
 
 The controller's types `local` calls are internal to it; the controller names the tool as a
-friend (`InternalsVisibleTo("smt-live")`, since controller 0.5.0), so at run time the tool calls
-the very assembly a node loads.
+friend (`InternalsVisibleTo("smt-live")`), so at run time the tool calls the very assembly a node
+loads.
 
 ### A build for another machine
 
@@ -65,8 +66,8 @@ Mac and back is in [`demo/04-comparative/SCRIPT.md`](demo/04-comparative/SCRIPT.
 
 ## Environment
 
-`diagnostics`, `preflight` and `run` read where to connect from three variables. None has a
-default; the tool names the ones that are not set.
+`diagnostics`, `preflight`, `run` and `fetch` read where to connect from three variables. None
+has a default; the tool names the ones that are not set.
 
 | Variable | |
 |---|---|
@@ -74,25 +75,32 @@ default; the tool names the ones that are not set.
 | `WITAI_SMT_LIVE_IDENTITY` | the identity server's URL |
 | `WITAI_VERIFY_LIVE_KEY` | a `wit_sk_` application key: the variable the Verify and Corpus live tools read too |
 
-The key goes to the SDK and nowhere else: it is never printed or written.
+The key goes to the SDK and nowhere else: it is never printed or written. The key goes only to an
+`https://` address: both addresses must be `https://` (the key is exchanged with the identity
+server, and the token it gives goes to the server), or `http://` to this machine
+(`http://localhost`, `127.0.0.1`, `[::1]`) for a local test. Any other address is refused, by the
+variable's name and without its value, before a connection is made.
 
 ## The options of a run
 
-`preflight` and `run` take the options of the controller's options document, by its names; an
-option not given, or 0, is the controller's default.
+`preflight` and `run` take the options of the controller's options document, by its names. An
+option not given is the controller's default, and so is 0, but for `--rate`: `--rate 0` turns the
+copies off (no package is solved on two machines, and every `unsat` rests on one machine; the
+report says `sampling none`), while `--rate` not given is the default, 0.05.
 
-| Option | Document name | Default | Ceiling |
-|---|---|---|---|
-| `--query check\|enumerate\|prove` | `query` | `check` | |
-| `--rate R` | `sampling_rate` | 0.05 | 1 |
-| `--rlimit N` | `rlimit` | 150,000,000 | 4,294,967,295 |
-| `--hard-cap S` | `hard_cap_s` | 60 | 600 |
-| `--memory MB` | `memory_mb` | 1,024 | 4,096 |
-| `--seed N` | `seed` | 0 | 2,147,483,647 |
-| `--max-models N` | `max_models` | 2 | 1,000 |
+| Option | Document name | Absent | 0 | Ceiling |
+|---|---|---|---|---|
+| `--query check\|enumerate\|prove` | `query` | `check` | | |
+| `--rate R` | `sampling_rate` | 0.05 | no copies | 1 |
+| `--rlimit N` | `rlimit` | 150,000,000 (the profile's) | the default | 4,294,967,295 |
+| `--hard-cap S` | `hard_cap_s` | 60 | the default | 600 |
+| `--memory MB` | `memory_mb` | 1,024 | the default | 4,096 |
+| `--seed N` | `seed` | 0 | the default | 2,147,483,647 |
+| `--max-models N` | `max_models` | 2 | the default | 1,000 |
 
-`run` refuses options out of their ranges before anything is sent (the controller would refuse
-the run); `preflight` sends them, and prints the controller's sentence for each.
+`run` refuses options out of their ranges before anything is sent, and before it connects (the
+controller would refuse the run); `preflight` sends them, and prints the controller's sentence for
+each.
 
 ## The verbs
 
@@ -127,9 +135,15 @@ packages a run would make. Exits 1 when a run would not start or the options are
 smt-live run <problems.jsonl> [options] [--out <folder>]
 ```
 
-The set is uploaded as a blob (in chunks, with its progress); `SmtRun` is submitted with the blob
-and the options; the job's progress is printed while it runs. The documents go to the folder
-(`smt-run-` and the head of the job's id when `--out` is not given):
+The folder of the documents (`smt-run-` and the tool's start, `yyyyMMdd-HHmmss`, when `--out` is
+not given) is made first, and held to be writable and free: a folder that cannot be written, or
+that already holds a run's documents (one of the four, `fleet.json` or `local.json`), is refused
+before the tool connects, and nothing is sent. Then the set is uploaded as a blob (in chunks,
+with its progress); `SmtRun` is submitted with the blob and the options (the job's id is printed);
+the job's progress is printed while it runs. A status that cannot be read (a connection that
+drops) is asked for again at every poll for up to ten minutes before the tool stops waiting. Once
+the job has ended, its four documents are downloaded before anything else is done, each on its
+own:
 
 | File | Schema |
 |---|---|
@@ -141,10 +155,21 @@ and the options; the job's progress is printed while it runs. The documents go t
 Then the summary of the report and the integrity document: what the run ran with, the set as it
 was read, the rows by status, the verdicts, the unknowns by reason, the agreement with the expected
 verdicts, the evaluator's classes (by logic, and the partial ones by reason), the enumerations,
-the copies and how they agreed, the problems that rest on one machine, the disputes and how they
-ended, the lies found, the disagreements between the evaluator and the solver (each by index and
-id), the problems without a result, the repairs, refused result packages and node faults, each
-fan-out, and the first rows that were not answered `ok`.
+the copies and how they agreed, what rests on one machine (the problems, the `unsat` among them
+and the complete enumerations that found models: `unsat_one_copy` and `complete_one_copy`), the
+run's `binding` (whether the platform told the server which package each result came back for,
+with the results told and not), the disputes and how they ended, the lies found, the
+disagreements between the evaluator and the solver (each by index and id), the problems without
+a result, the repairs, refused result packages and node faults, each fan-out, and the first rows
+that were not answered `ok`. The report is held to the rows it was written from: their number,
+and the counts by status, verdict, agreement with the expected verdict and the evaluator's class.
+
+When the tool cannot finish its part after the submit, the job goes on on the server, and the
+tool says so with the line that fetches its documents once it has ended
+(`smt-live fetch <job id> --out <folder>`): on Ctrl+C, when the job's status could not be read for
+ten minutes, and when a document could not be downloaded (the others are downloaded all the same,
+and the line names a fresh folder). A job that failed or was cancelled, or a stop before any
+document came, leaves no empty folder behind.
 
 `run` also writes `fleet.json` beside the documents: what the run took, measured end to end from
 the tool's start (the moment the files were ready) to the documents on disk, the fleet side of
@@ -163,10 +188,28 @@ the comparative test:
 | `server` | the job's times by the server's clock, when it gives them: `queue_seconds` (taken to started) and `run_seconds` (started to ended) |
 | `problems_per_second` | the rows taken over the wall time |
 
-A line that starts with `!!!` is one a lab must not miss. These make the run **alarming** (exit 3):
-a disagreement between the evaluator and the solver, a lie, a standing dispute, a problem without
-a result, a verdict that disagrees with the expected one, a settled model the evaluator calls
-failed, and a sampling that was asked for and did not happen (`short`).
+A line that starts with `!!!` is one a lab must not miss, and every such line of the summary makes
+the run **alarming** (exit 3): a disagreement between the evaluator and the solver, a lie, a
+standing dispute, a problem without a result, a verdict that disagrees with the expected one, a
+settled model the evaluator calls failed (each counted from the report and from the rows: a row
+says it whatever the report counts), a sampling that was asked for and did not happen (`short`),
+and a report that does not count the rows it was written from. A package a fan-out left
+unanswered is printed on its fan-out's line, not loudly: the repair round answers it, and a
+problem left without a result is an alarm of its own.
+
+### fetch
+
+```
+smt-live fetch <job id> [--out <folder>]
+```
+
+The job of a `run` that the tool stopped waiting for (Ctrl+C, a connection lost, a download that
+failed), by the id `run` printed. Its status is read once (a job the server does not know, or not
+for this key, is said at once, and a job of another script is refused); while it runs, its
+progress is printed; once it has ended, its four documents are downloaded, checked and summarised
+exactly as `run` does, with the same exit codes. The folder (`smt-run-` and the head of the job's
+id when `--out` is not given) is held as `run` holds it. A fetch measures nothing: it writes no
+`fleet.json` (the tool did not see the run from its start).
 
 ### compare
 
@@ -178,8 +221,8 @@ Two runs of the same problem set. Every row of the results must be the same by e
 the three that depend on where the work was placed (`copies`, `agreed`, `settled_by`): the status,
 the verdict, the models, the values, the validation, the digest, the stats. The provenance must be
 the same as a whole: the profile, the module, the engine, the controller, the options, the set.
-Both files are read a row at a time. Every difference is printed with its place; any makes the
-exit code 1.
+Both files are read a row at a time. Every difference is printed with its place (a row that is
+JSON but no object is one); any makes the exit code 4.
 
 ### pack
 
@@ -249,9 +292,12 @@ and there is no repair or dispute round (a problem without an answer stays witho
 fleet's for the same set, options and module.
 
 The folder (`smt-local-` and the start's time when `--out` is not given) gets the four documents
-and `local.json`; the working files (the packages, the result packages, the sandbox's stdio files)
-live in its `.work` folder while the run lasts and are removed at its end. Ctrl+C stops the run
-between problems.
+and `local.json`; it is held as `run` holds its folder, before the sandbox is made (one that holds
+a run's documents is refused). The working files (the packages, the result packages, the
+sandbox's stdio files) live in its `.work` folder while the run lasts and are removed at its end.
+Ctrl+C stops the run between problems: no problem is handed out after it, the sessions that run
+end at their check's end, and no document is written; a second Ctrl+C ends the tool at once (its
+`.work` folder then stays, and the next run in the folder removes it).
 
 | `local.json` | |
 |---|---|
@@ -278,7 +324,9 @@ smt-live comparative <local folder> <fleet run folder> [--fixed <fleet run folde
 ```
 
 The comparative table of one set, from what `local` and `run` wrote; every number is read from
-their documents and measurements, and nothing is estimated:
+their documents and measurements, and nothing is estimated. A measurement (`local.json`,
+`fleet.json`) is read only beside the documents of the set it measured: one whose set is not the
+set its folder's provenance names is refused (exit 2).
 
 - **The same thing?** The set (its SHA-256 in both provenances), the module, the options but the
   sampling rate, and both controller versions.
@@ -300,29 +348,38 @@ their documents and measurements, and nothing is estimated:
   compared set's. Where the lines cross is the size above which the fleet finishes first; the
   lines, the inputs and these assumptions are printed. "This machine finishes first at every
   size a set may have" when the fleet never catches up, or catches up only above the 1,000,000 rows
-  a set may have. Without `--fixed`, or without `fleet.json` (a run of an older tool), there is no
-  crossover, and the line says why; the measured result at the compared size is printed in any
-  case.
+  a set may have; "the fleet finishes first at every size a set may have" when this machine
+  catches up only above them. The lines are drawn only from two runs that ran the same thing and
+  agree row by row, and from a `--fixed` run that completed and ran the fleet run's module with
+  its options and its sampling rate; otherwise, as without `--fixed` or without `fleet.json` (a
+  run of an older tool), there is no crossover, and the line says why.
 - **Operator effort** is not measured by the tool: `SCRIPT.md` of the comparative test lists each
   side's steps.
 
-Exit 0 when both ran the same set, module and options and every row is the same; 1 when anything
-differs; 2 when a document is not there.
+Exit 0 when both ran the same set, module and options and every row is the same; 4 when anything
+differs; 2 when a document is not there or a measurement is not of its folder's set.
 
 ## Exit codes
+
+One meaning each:
 
 | Code | |
 |---|---|
 | 0 | done, and everything held |
-| 1 | a job did not complete; a document did not come or does not hold to its schema; a preflight would not start or refuses the options; two runs differ; a packed file was skipped or its row is refused; a local run had no sandbox; the two runs of a comparative differ |
-| 2 | the command line, an input or the environment is wrong; nothing was sent or run |
-| 3 | a run or a local run completed and its documents hold to their schemas, and it reports something alarming |
+| 1 | the work was done and did not hold: a job did not complete; a document did not come or does not hold to its schema; a preflight would not start or refuses the options; a packed file was skipped or its row is refused; a local run had no sandbox |
+| 2 | the command line, an input, the folder or the environment is wrong (an address the key may not go to among them); nothing was sent or run |
+| 3 | a run, a fetched run or a local run completed and its documents hold to their schemas, and it reports something alarming |
+| 4 | the two runs of a `compare` or a `comparative` differ |
+| 5 | stopped by Ctrl+C; the tool said what it stopped and, for a job, that it goes on on the server and how to fetch it |
+| 6 | the tool could not finish: the connection, the server or this machine failed (a sign-in, an upload, a status unread for ten minutes, a download, a file); what is left on the server is said |
+
+Ctrl+C stops the tool's work at the first press and ends the tool at the second.
 
 ## Demo kits
 
 - [`demo/01-known-answers`](demo/01-known-answers/SCRIPT.md): the 469 SMT-LIB problems of the
-  controller's slice tests, fetched by the tests' own list and fetcher and packed; every verdict
-  must be the list's and every class of the evaluator the slice test's.
+  controller's slice tests, fetched by the tests' own list and fetcher and packed, the set held to
+  its SHA-256; every verdict must be the list's and every class of the evaluator the slice test's.
 - [`demo/02-eight-queens`](demo/02-eight-queens/SCRIPT.md): two enumerations (eight queens, 92
   models; a Latin square with exactly one), the smoke test of a fleet.
 - [`demo/03-long-tail`](demo/03-long-tail/SCRIPT.md): the long tail, 1,960 SMT-LIB problems of
@@ -343,8 +400,9 @@ dotnet test Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj
 
 They need no server: the command line, the ids and the packing of a folder (read back by the model
 package's reader), the schema check against the controller's own schemas, the summary, the
-comparison of two runs, the three server verbs driven through a server in memory (and what `run`
-measures), the eight-queens kit against the model evaluator (every placement of eight queens, one a
+comparison of two runs, the four server verbs driven through a server in memory (what `run`
+measures, and how it ends when it is stopped, loses the server or cannot download a document),
+the waiting for a job against the SDK's jobs in memory, the exit codes, the eight-queens kit against the model evaluator (every placement of eight queens, one a
 row, and the one completion of the Latin square), the long-tail kit's list against the rules of its
 selection, its `EXPECTED.md` and the options of its commands, the comparative table and its
 crossover on fixtures, and local runs. Those solve in the controller's sandbox, with the solver
@@ -356,6 +414,7 @@ three. A test of the category `Slice` runs `local` on eight problems of the slic
 tests fetch, each with the list's verdict. The test project lives in the tool's folder; it is in
 the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the controller's
 tests (the slice test in its job "slice"), and runs the self-contained build of each platform on
-the eight-queens kit from where its zip was unpacked. The long-tail kit's Python scripts have tests
-of their own in `demo/03-long-tail/tests` (`python -I -m unittest discover -s tests -t tests` in
-the kit's folder), which the workflow "AI Smt long tail" runs.
+the eight-queens kit from where its zip was unpacked. The Python scripts of the known-answers and
+the long-tail kits have tests of their own in `demo/01-known-answers/tests` and
+`demo/03-long-tail/tests` (`python -I -m unittest discover -s tests -t tests` in the kit's
+folder), which the workflows "AI Smt" and "AI Smt long tail" run.

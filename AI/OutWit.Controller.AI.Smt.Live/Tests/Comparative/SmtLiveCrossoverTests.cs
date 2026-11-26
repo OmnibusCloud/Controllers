@@ -76,6 +76,19 @@ public sealed class SmtLiveCrossoverTests
         });
     }
 
+    [Test]
+    public void AFleetFirstOnlyBelowASizeNoSetCanReachIsFirstAtEverySizeASetMayHaveTest()
+    {
+        // Local: 2,000,030 s fixed, 1 s a problem. Fleet: 5 s fixed, 2 s a problem: equal at two million problems.
+        var crossover = SmtLiveCrossover.Compute(100, 2_000_030 + 100, 2_000_030, 100, 205, (10, 25));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(crossover.Kind, Is.EqualTo(SmtLiveCrossoverKind.FleetAlways));
+            Assert.That(crossover.Problems, Is.GreaterThan(SmtProblemSetLimits.MAX_ROWS));
+        });
+    }
+
     #endregion
 
     #region Not Computed Tests

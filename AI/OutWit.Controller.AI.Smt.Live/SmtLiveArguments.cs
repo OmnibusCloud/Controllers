@@ -16,7 +16,7 @@ internal sealed class SmtLiveArguments
 {
     #region Constants
 
-    /// <summary>The folder a run's documents go to; the file a pack writes; the folder diagnostics saves the capabilities to.</summary>
+    /// <summary>The folder a run's (or a fetched run's) documents go to; the file a pack writes; the folder diagnostics saves the capabilities to.</summary>
     public const string OUT = "--out";
 
     /// <summary><c>query</c>: the query of a row that names none; for <c>pack</c>, the query written into every row.</summary>
@@ -58,6 +58,7 @@ internal sealed class SmtLiveArguments
             ["diagnostics"] = (SmtLiveVerb.Diagnostics, 0, [OUT]),
             ["preflight"] = (SmtLiveVerb.Preflight, 1, RUN_OPTIONS),
             ["run"] = (SmtLiveVerb.Run, 1, [.. RUN_OPTIONS, OUT]),
+            ["fetch"] = (SmtLiveVerb.Fetch, 1, [OUT]),
             ["compare"] = (SmtLiveVerb.Compare, 2, []),
             ["pack"] = (SmtLiveVerb.Pack, 1, [QUERY, OUT]),
             ["local"] = (SmtLiveVerb.Local, 1, LOCAL_OPTIONS),
@@ -68,9 +69,11 @@ internal sealed class SmtLiveArguments
 
     #region Constructors
 
-    private SmtLiveArguments(SmtLiveVerb verb, IReadOnlyList<string> inputs, string? output, SmtOptionsData options, SmtQuery? query, int? degree, string? fixedRun)
+    private SmtLiveArguments(SmtLiveVerb verb, IReadOnlyList<string> inputs, string? output, SmtOptionsData options, SmtQuery? query, int? degree, string? fixedRun,
+        Guid? job)
     {
         Verb = verb;
+        Job = job;
         Inputs = inputs;
         Output = output;
         Options = options;
@@ -154,13 +157,25 @@ internal sealed class SmtLiveArguments
             return null;
         }
 
+        Guid? job = null;
+        if (verb.Verb == SmtLiveVerb.Fetch)
+        {
+            if (!Guid.TryParse(inputs[0], out var id))
+            {
+                error = $"'{inputs[0]}' is not a job id (run prints it: \"SmtRun submitted: job <id>\")";
+                return null;
+            }
+
+            job = id;
+        }
+
         if (!TryOptions(values, out var options, out var query, out error))
             return null;
 
         if (!TryDegree(values, out var degree, out error))
             return null;
 
-        return new SmtLiveArguments(verb.Verb, inputs, values.GetValueOrDefault(OUT), options, query, degree, values.GetValueOrDefault(FIXED));
+        return new SmtLiveArguments(verb.Verb, inputs, values.GetValueOrDefault(OUT), options, query, degree, values.GetValueOrDefault(FIXED), job);
     }
 
     /// <summary>
@@ -297,7 +312,7 @@ internal sealed class SmtLiveArguments
     /// <summary>What the tool is asked to do.</summary>
     public SmtLiveVerb Verb { get; }
 
-    /// <summary>The positional arguments: the problem set, the two folders of <c>compare</c> and of <c>comparative</c>, the folder of <c>pack</c>.</summary>
+    /// <summary>The positional arguments: the problem set, the job id of <c>fetch</c>, the two folders of <c>compare</c> and of <c>comparative</c>, the folder of <c>pack</c>.</summary>
     public IReadOnlyList<string> Inputs { get; }
 
     /// <summary>The value of <c>--out</c>; null when it was not given.</summary>
@@ -314,6 +329,9 @@ internal sealed class SmtLiveArguments
 
     /// <summary>The folder <c>--fixed</c> names: a fleet run of a small set; null when it was not given.</summary>
     public string? Fixed { get; }
+
+    /// <summary>The job <c>fetch</c> fetches; null for every other verb.</summary>
+    public Guid? Job { get; }
 
     #endregion
 }

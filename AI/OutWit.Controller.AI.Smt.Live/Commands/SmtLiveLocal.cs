@@ -77,8 +77,12 @@ internal sealed class SmtLiveLocal
     /// <param name="given">The run's options as given; the sampling rate is set to 0.</param>
     /// <param name="degree">The sessions at once; null for the node's rule.</param>
     /// <param name="folder">Where the documents go; null for <c>smt-local-</c> and the start's time, in the current folder.</param>
-    /// <param name="ct">Stops the run: no problem is handed out after it.</param>
-    /// <returns>The exit code: 0 when every document holds and nothing is alarming, 3 when something is, 2 when the options are out of range, 1 otherwise.</returns>
+    /// <param name="ct">Stops the run: no problem is handed out after it, and no document is written.</param>
+    /// <returns>
+    /// The exit code: 0 when every document holds and nothing is alarming, 3 when something is, 2
+    /// when the options are out of range or the folder holds another run's documents, 5 when
+    /// Ctrl+C stopped it, 1 otherwise.
+    /// </returns>
     public async Task<int> RunAsync(string path, SmtOptionsData given, int? degree, string? folder, CancellationToken ct)
     {
         var options = given.Clone();
@@ -101,8 +105,13 @@ internal sealed class SmtLiveLocal
         }
 
         var target = Path.GetFullPath(folder ?? FOLDER_PREFIX + m_clock.StartedUtc.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+        if (!SmtLiveFolder.Prepare(target, out var unusable))
+        {
+            m_output.WriteLine($"{unusable}; nothing was run");
+            return SmtLiveExitCodes.USAGE;
+        }
+
         var work = Path.Combine(target, WORK_FOLDER);
-        Directory.CreateDirectory(target);
         TryDelete(work);
         Directory.CreateDirectory(work);
 
@@ -124,12 +133,18 @@ internal sealed class SmtLiveLocal
             m_output.WriteLine($"{SmtLiveRunSummary.LOUD}result   : FAILED: {exception.Message}");
             return SmtLiveExitCodes.FAILED;
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            m_output.WriteLine($"{SmtLiveRunSummary.LOUD}stopped (Ctrl+C): no problem was handed out after it; no document was written");
+            return SmtLiveExitCodes.STOPPED;
+        }
         finally
         {
             if (m_sandbox == null)
                 sandbox?.Dispose();
 
             TryDelete(work);
+            SmtLiveFolder.RemoveIfEmpty(target);
         }
     }
 

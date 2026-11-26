@@ -18,6 +18,8 @@ public sealed class SmtLiveArgumentsTests
     [TestCase("local p.jsonl --degree 14 --hard-cap 100 --out d", "Local", 1)]
     [TestCase("comparative a b", "Comparative", 2)]
     [TestCase("comparative a b --fixed c", "Comparative", 2)]
+    [TestCase("fetch 0b6e3f3a-2d8e-4c55-8d0e-5a1d7c9b2f22", "Fetch", 1)]
+    [TestCase("fetch 0b6e3f3a-2d8e-4c55-8d0e-5a1d7c9b2f22 --out d", "Fetch", 1)]
     public void ParseReadsEveryVerbTest(string line, string verb, int inputs)
     {
         var arguments = SmtLiveArguments.Parse(Split(line), out var error);

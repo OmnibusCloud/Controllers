@@ -10,9 +10,10 @@
 # The folder is replaced; the zip is <folder>.zip beside it. The checks: the module and the
 # native library are the bytes the controller's source pins (the constants the controller holds
 # them to at run time), and the folder holds no other wasmtime library. The apphost of an
-# osx-arm64 build made on another system carries no signature: sign it ad hoc on the Mac
-# (codesign --force --sign - smt-live) and never re-sign the native library, whose SHA-256 is
-# pinned.
+# osx-arm64 build is signed ad hoc by the .NET SDK, from any system (a build made on Windows
+# carries its embedded signature too); should macOS kill it at its start ("Killed: 9"), sign it
+# again on the Mac (codesign --force --sign - smt-live), and never re-sign the native library,
+# whose SHA-256 is pinned.
 set -euo pipefail
 
 if [ $# -ne 2 ]; then

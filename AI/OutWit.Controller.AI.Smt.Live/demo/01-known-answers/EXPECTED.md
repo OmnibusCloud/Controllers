@@ -4,7 +4,8 @@ Two kinds of numbers are below. The ones a run must show come from the problems,
 the evaluator alone: the committed list (`AI/OutWit.Controller.AI.Smt.Tests/Slice/fetch-list.tsv`)
 and the controller's slice tests, which solve every problem of it in the controller's sandbox on
 the build server (`Solver/SmtSolverSliceTests.cs`, `Slice/SmtSlicePreflightTests.cs`). They are the
-same on any fleet, and `check.py` holds a run to them. The ones only a fleet measures (the wall
+same on any fleet: `make_set.py` holds the set to its SHA-256, and `check.py` holds a run to
+them. The ones only a fleet measures (the wall
 time, how the work was placed) are in the table at the end, from the first real run on the test
 fleet.
 
@@ -44,7 +45,7 @@ stripped : check-sat 469, exit 469, get-value 6 (left out by the sanitizer: the 
 | Expected | agree 469, disagree 0, n/a 0 |
 | The evaluator's classes | validated 217, partial 8, failed 0 |
 | Copies (`--rate 1`, a fleet of two machines of 8 GB or more) | sampling `as_asked`; 469 problems answered by two machines, all of them agreeing; settled by `copies` 469; none rests on one machine |
-| Integrity | lies 0, evaluator/solver disagreements 0, no result 0, disputes 0 |
+| Integrity | lies 0, evaluator/solver disagreements 0, no result 0, standing disputes 0 |
 | `smt-live run` | exit 0, `result   : OK` |
 | `check.py` | `held: everything` |
 | `compare` of two runs | `result   : the same settled answers and the same provenance` |
