@@ -383,7 +383,11 @@ counted as a node's unreadable result.
 **Documents.** `Smt.Settle` writes the results, the report, the provenance and the integrity
 document into one ledger blob of the host's own, with the full models of the rows whose models
 the results cut at 64 KB; the other activities hand a document out of it as it is. No document
-names a machine. The report and the integrity document say whether the platform told the host
+names a machine. The report lists the claims that rest on one machine and that nothing but it
+vouches for: every `unsat` (`unsat_one_copy`) and every enumeration that found models and says
+there is no other (`complete_one_copy`; of the enumerations kept as exactly one model, those on
+one machine's word in `enumerate.kept_one_copy`); the integrity document counts both. The report
+and the integrity document say whether the platform told the host
 which package each result came back for (`binding`: `bound`, `unbound`, `mixed`, or `none` when
 no result came back), and the integrity document counts the results of each kind
 (`results_bound`, `results_unbound`). Their fields are in [`docs/capabilities.md`](docs/capabilities.md) and their

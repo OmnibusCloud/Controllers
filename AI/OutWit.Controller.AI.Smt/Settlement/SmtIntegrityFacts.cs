@@ -43,6 +43,9 @@ internal sealed class SmtIntegrityFacts
     /// <summary>Of those, the problems answered <c>unsat</c>: nothing but that machine vouches for them.</summary>
     public int UnsatOneCopy { get; set; }
 
+    /// <summary>Of those, the enumerations that found models and say there is no other: their completeness is the solver's last <c>unsat</c>, which nothing but that machine vouches for.</summary>
+    public int CompleteOneCopy { get; set; }
+
     /// <summary>The disputes, ordered by index.</summary>
     public List<SmtDisputeRecord> Disputes { get; } = [];
 

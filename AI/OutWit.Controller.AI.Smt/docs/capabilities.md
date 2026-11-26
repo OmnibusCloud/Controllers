@@ -125,15 +125,17 @@ by logic, by query); the rows by status; the verdicts; the unknowns by reason; t
 the expected verdicts; the evaluator's classes, by logic, and the partial ones by reason; the
 copies (problems answered by two machines or more, how many agreed, the disputes and how they
 ended, the answers by how they were settled); the problems answered `unsat` by one machine only,
-by index; the long tail (every problem with a settled row, the most fuel first, with what stopped
+by index (`unsat_one_copy`), and the enumerations that found models and say there is no other by
+one machine only (`complete_one_copy`); the long tail (every problem with a settled row, the most fuel first, with what stopped
 it and the budget); the attribution from the problems' `:source` and `:license`; and for a run
-with enumerations, the problems with exactly one model (kept) and those with two or more
-(dropped).
+with enumerations, the problems with exactly one model (kept; those of them on one machine's word
+in `kept_one_copy`) and those with two or more (dropped).
 
 ### The integrity document ([`smt-integrity.schema.json`](smt-integrity.schema.json))
 
 Counts only, and records by problem index: the answers taken, the problems compared and how they
-compared, the problems that rest on one machine (and of them the `unsat` ones), the disputes by
+compared, the problems that rest on one machine (and of them the `unsat` ones and the complete
+enumerations that found models), the disputes by
 cause and by outcome, the answers a lie was found in and the problems they are of, the models the
 evaluator called failed, **the problems on which the machines agree and the evaluator does not,
 each by its index**, the repairs and why, the problems left without a result and why, the result
@@ -202,6 +204,11 @@ What it does not claim:
 - **`unsat` and `unknown` rest on the copies.** Nothing beyond the copies vouches for them; a
   problem whose package was not sampled rests on one machine, and the report lists every `unsat`
   answered by one machine only. Raise the sampling rate to 1 for every problem twice.
+- **The completeness of an enumeration rests on the copies.** The models of an enumeration are
+  checked; that there is no other (`complete: true`) is the solver's last `unsat`, and nothing
+  checks it. The report lists every enumeration that found models and says it is complete on one
+  machine's word (`complete_one_copy`), and of the enumerations kept as exactly one model, those
+  that rest on one machine (`enumerate.kept_one_copy`).
 - **`partial` is not checked to the end.** Quantifiers, algebraic numbers, regular expressions,
   floating point and the other reasons of the model package's evaluator leave a model partial: it
   rests on the copies too. A model past the session's output cap is partial (`output_exceeded`).

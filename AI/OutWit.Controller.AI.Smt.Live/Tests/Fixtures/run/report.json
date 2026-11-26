@@ -37,6 +37,7 @@
     "settled_by": { "one_copy": 0, "copies": 3, "dispute": 0, "agreement": 0 }
   },
   "unsat_one_copy": { "count": 0, "indices": [] },
+  "complete_one_copy": { "count": 0, "indices": [] },
   "long_tail": {
     "rlimit": 150000000,
     "fuel": 300000000000,
@@ -47,5 +48,5 @@
     ]
   },
   "attribution": { "sources": [], "other_problems": 0 },
-  "enumerate": { "exactly_one": 0, "two_or_more": 1, "no_model": 0, "undecided": 0, "kept": [], "dropped": [2] }
+  "enumerate": { "exactly_one": 0, "two_or_more": 1, "no_model": 0, "undecided": 0, "kept": [], "kept_one_copy": [], "dropped": [2] }
 }

@@ -11,7 +11,8 @@ namespace OutWit.Controller.AI.Smt.Documents;
 /// (whether the platform told the host which package each result was returned for among it),
 /// the problem set as it was read, the verdicts and the unknowns by reason, the agreement with the
 /// expected verdicts, the evaluator's classes by logic, the copies and how the disputes ended, the
-/// problems answered <c>unsat</c> by one machine only, the long tail with the budget, the
+/// problems answered <c>unsat</c> by one machine only and the enumerations whose completeness rests
+/// on one machine, the long tail with the budget, the
 /// attribution from the problems' <c>:source</c> and <c>:license</c>, and for enumerations the
 /// problems with exactly one model and those with two or more. It names no machine.
 /// </summary>
@@ -81,6 +82,11 @@ internal static class SmtReportWriter
         WriteIndices(writer, "indices", facts.UnsatOneCopy);
         writer.WriteEndObject();
 
+        writer.WriteStartObject("complete_one_copy");
+        writer.WriteNumber("count", facts.CompleteOneCopy.Count);
+        WriteIndices(writer, "indices", facts.CompleteOneCopy);
+        writer.WriteEndObject();
+
         WriteTail(writer, provenance, facts);
         WriteAttribution(writer, facts);
 
@@ -92,6 +98,7 @@ internal static class SmtReportWriter
             writer.WriteNumber("no_model", facts.NoModel);
             writer.WriteNumber("undecided", facts.Undecided);
             WriteIndices(writer, "kept", facts.ExactlyOne);
+            WriteIndices(writer, "kept_one_copy", facts.KeptOneCopy);
             WriteIndices(writer, "dropped", facts.TwoOrMore);
             writer.WriteEndObject();
         }

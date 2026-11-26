@@ -11,7 +11,7 @@
     "summary": {
       "type": "object",
       "required": [
-        "problems", "copies_made", "compared", "agreements", "disagreements", "one_copy", "unsat_one_copy", "disputes", "disputes_resolved", "disputed",
+        "problems", "copies_made", "compared", "agreements", "disagreements", "one_copy", "unsat_one_copy", "complete_one_copy", "disputes", "disputes_resolved", "disputed",
         "dispute_causes", "dispute_outcomes", "lies", "problems_with_lies", "failed_models", "evaluator_solver_disagreements", "repairs", "repairs_by_reason",
         "no_result", "no_result_by_reason", "rejected_results", "rejected", "node_faults", "node_faults_by_code", "sampling_rate", "sampling", "unanswered_packages",
         "binding", "results_bound", "results_unbound"
@@ -25,6 +25,7 @@
         "disagreements": { "type": "integer", "minimum": 0, "description": "Of those, problems whose answers gave more than one digest." },
         "one_copy": { "type": "integer", "minimum": 0, "description": "Problems whose answer rests on one machine: one answer; answers of one digest not two of which came back bound in one fan-out (unbound answers may be one machine's, however many they are); or a lone answer of the first fan-out and a lone answer of the repair round with the same digest (two fan-outs may place them on one machine). A problem whose package was not sampled is one of them." },
         "unsat_one_copy": { "type": "integer", "minimum": 0, "description": "Of those, problems answered unsat: nothing beyond that machine vouches for them." },
+        "complete_one_copy": { "type": "integer", "minimum": 0, "description": "Of those, enumerations that found models (verdict sat) and say there is no other (complete): the server's evaluator checks the models, and the completeness is the solver's last unsat, which nothing beyond that machine vouches for. An enumeration that found no model is an unsat and is counted under unsat_one_copy." },
         "disputes": { "type": "integer", "minimum": 0, "description": "Problems that went to three more machines." },
         "disputes_resolved": { "type": "integer", "minimum": 0, "description": "Disputes a majority of the three settled." },
         "disputed": { "type": "integer", "minimum": 0, "description": "Disputes that stand: rows with status disputed." },

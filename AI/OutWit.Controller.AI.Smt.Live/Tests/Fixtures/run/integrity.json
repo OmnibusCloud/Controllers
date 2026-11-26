@@ -8,6 +8,7 @@
     "disagreements": 0,
     "one_copy": 0,
     "unsat_one_copy": 0,
+    "complete_one_copy": 0,
     "disputes": 0,
     "disputes_resolved": 0,
     "disputed": 0,

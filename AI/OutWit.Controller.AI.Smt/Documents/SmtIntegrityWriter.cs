@@ -46,6 +46,7 @@ internal static class SmtIntegrityWriter
         writer.WriteNumber("disagreements", facts.Disagreements);
         writer.WriteNumber("one_copy", facts.OneCopy);
         writer.WriteNumber("unsat_one_copy", facts.UnsatOneCopy);
+        writer.WriteNumber("complete_one_copy", facts.CompleteOneCopy);
         writer.WriteNumber("disputes", facts.Disputes.Count);
         writer.WriteNumber("disputes_resolved", resolved);
         writer.WriteNumber("disputed", facts.Disputes.Count - resolved);

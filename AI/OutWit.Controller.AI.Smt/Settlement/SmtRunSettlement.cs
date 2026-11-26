@@ -125,6 +125,8 @@ internal static class SmtRunSettlement
                 set = reader.Summary;
             }
 
+            facts.CompleteOneCopy = report.CompleteOneCopy.Count;
+
             CountRounds(facts, main, repaired, settled, rate, sampled.Count);
 
             using (var stream = Create(sections[SmtLedger.REPORT]))
