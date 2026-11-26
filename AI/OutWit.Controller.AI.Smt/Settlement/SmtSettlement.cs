@@ -55,7 +55,7 @@ internal static class SmtSettlement
     /// <summary>
     /// Stores the problems of the first fan-out that go out once more as packages: those of the
     /// packages no taken result answers (a node's fault code, a refused result, nothing at all),
-    /// those every taken copy of which is a fault of its node, and those of a package the fan-out
+    /// those every taken copy of which is a fault of its node or a node's refusal, and those of a package the fan-out
     /// is known to have asked for twice that have fewer than two answers (<see cref="SmtRulings.NeedsRepair"/>).
     /// </summary>
     /// <param name="main">The first fan-out.</param>

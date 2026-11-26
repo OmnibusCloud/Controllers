@@ -9,6 +9,10 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// is taken only when
 /// <list type="bullet">
 /// <item>its ticket is one this round gave out;</item>
+/// <item>the platform, when it told the host which package's task the result came back for
+/// (<see cref="SmtResultBindings"/>), told it the package the ticket names: a result returned for
+/// another package is no answer to either (a node that answered one of its packages twice, in
+/// place of another);</item>
 /// <item>its reference is one a node returns: the words of a fault only beside a fault code, and
 /// then a code of the node's list, a sentence no longer than a node writes, and no blob (the
 /// node's word that it could not work on the package, counted so); for an answer a SHA-256 that
@@ -21,6 +25,14 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// Anything else is refused and counted by reason; the same blob returned twice counts once. A
 /// refused package fails that package and nothing else: its problems are simply without an
 /// answer from it, and none of its rows stays in the host's spool.
+/// <para>
+/// <b>Which package a result came back for.</b> A result the platform told the host of is bound:
+/// it is counted under the package whose task it was returned for, taken or refused, whatever
+/// ticket it names, so a package that a node robbed of its answer is a package that came back
+/// without one. A result the platform told nothing of (an older Grid, or a script that fills the
+/// collection another way) is unbound and counted under the ticket it names, as before. Every
+/// row of a taken package says which of the two it came in (<see cref="SmtCopy.Bound"/>).
+/// </para>
 /// <para>
 /// <b>Whose fault a failure is.</b> Whatever goes wrong while a node's blob is fetched, read and
 /// judged, of whatever type, makes that package unreadable and never ends the run: a node chose
@@ -51,8 +63,11 @@ internal static class SmtRoundIntake
     /// <summary>More results under one ticket than copies were asked for.</summary>
     public const string SURPLUS = "surplus";
 
+    /// <summary>A result the platform says was returned for a task of another package than the one its ticket names.</summary>
+    public const string OTHER_PACKAGE = "other_package";
+
     /// <summary>Every reason, in the order the documents list them.</summary>
-    public static readonly IReadOnlyList<string> REASONS = [UNKNOWN_TICKET, DUPLICATE, UNREADABLE, CONTENT, SURPLUS];
+    public static readonly IReadOnlyList<string> REASONS = [UNKNOWN_TICKET, DUPLICATE, UNREADABLE, CONTENT, SURPLUS, OTHER_PACKAGE];
 
     #endregion
 
@@ -98,14 +113,32 @@ internal static class SmtRoundIntake
 
         foreach (var reference in ordered)
         {
+            // The package whose task the result came back for: the platform's word when it gave
+            // one, the result's own otherwise. The result counts for that package, taken or refused.
+            var bound = SmtResultBindings.TicketOf(reference);
+            var returnedFor = ReturnedFor(bound, reference.Ticket, units);
+            if (returnedFor != null)
+                round.Returned[returnedFor] = round.Returned.GetValueOrDefault(returnedFor) + 1;
+
+            if (bound == null)
+                round.UnboundResults++;
+            else
+                round.BoundResults++;
+
             // A text that is no ticket is none this round gave out, however long it is.
             if (!SmtTickets.IsWellFormed(reference.Ticket) || !units.TryGetValue(reference.Ticket, out var unit))
             {
-                Reject(round, null, UNKNOWN_TICKET);
+                Reject(round, returnedFor, UNKNOWN_TICKET);
                 continue;
             }
 
-            round.Returned[unit.Ticket] = round.Returned.GetValueOrDefault(unit.Ticket) + 1;
+            // Returned for a task of another package (or told for two): no answer to the one it
+            // names, and the one it came back for has none from that task.
+            if (bound != null && !string.Equals(bound, unit.Ticket, StringComparison.Ordinal))
+            {
+                Reject(round, returnedFor, OTHER_PACKAGE);
+                continue;
+            }
 
             // The node's word that it could not work on the package: one of its codes, its sentence, and no blob.
             if (!string.IsNullOrEmpty(reference.FaultCode))
@@ -157,7 +190,7 @@ internal static class SmtRoundIntake
             if (bounds == null || !string.Equals(bounds.Ticket, unit.Ticket, StringComparison.Ordinal))
                 bounds = await SmtTaskBounds.LoadAsync(unit, blobs);
 
-            var (accepted, reason) = ReadPackage(unit, reference, path, bounds, spool);
+            var (accepted, reason) = ReadPackage(unit, reference, path, bounds, spool, bound != null);
             if (accepted == null)
             {
                 Reject(round, unit.Ticket, reason!);
@@ -190,6 +223,18 @@ internal static class SmtRoundIntake
     #endregion
 
     #region Tools
+
+    /// <summary>
+    /// The ticket of the package of this round a result came back for: the one the platform told
+    /// for a bound result, the one it names for an unbound one; null when that is no package of
+    /// this round (a result bound to another round's package, or under a ticket the round did not
+    /// give out).
+    /// </summary>
+    private static string? ReturnedFor(string? bound, string? named, IReadOnlyDictionary<string, SmtTaskPackageData> units)
+    {
+        var ticket = bound ?? named;
+        return ticket != null && units.ContainsKey(ticket) ? ticket : null;
+    }
 
     /// <summary>
     /// Whether a reference with a fault code is the one a node returns for a package it could not
@@ -238,19 +283,20 @@ internal static class SmtRoundIntake
     /// read, a row at a time, and stay there only when the whole package holds: a package that is
     /// refused, at whichever row, leaves the spool as long as it was before it.
     /// </summary>
-    private static (SmtAcceptedPackage? Accepted, string? Reason) ReadPackage(SmtTaskPackageData unit, SmtResultPackageData reference, string path, SmtTaskBounds bounds, SmtSpool? spool)
+    private static (SmtAcceptedPackage? Accepted, string? Reason) ReadPackage(SmtTaskPackageData unit, SmtResultPackageData reference, string path, SmtTaskBounds bounds, SmtSpool? spool,
+        bool bound)
     {
         var copies = new List<SmtCopy>(unit.ProblemCount);
         var mark = spool?.Length ?? 0;
 
-        var reason = ReadRows(unit, path, bounds, spool, copies);
+        var reason = ReadRows(unit, path, bounds, spool, copies, bound);
 
         // Exactly the package's problems: none missing, none of another package, none twice.
         if (reason == null && (copies.Count != unit.ProblemCount || !string.Equals(SmtTickets.IndexDigest(copies.Select(copy => copy.Index)), unit.IndexDigest, StringComparison.Ordinal)))
             reason = CONTENT;
 
         if (reason == null)
-            return (new SmtAcceptedPackage(unit, reference.Sha256, copies), null);
+            return (new SmtAcceptedPackage(unit, reference.Sha256, copies, bound), null);
 
         spool?.Rewind(mark);
         return (null, reason);
@@ -263,7 +309,7 @@ internal static class SmtRoundIntake
     /// bound, a disk that is full) says nothing about the package and is not caught.
     /// </summary>
     /// <returns>Null when every row was taken; else the reason the package is refused for.</returns>
-    private static string? ReadRows(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, List<SmtCopy> copies)
+    private static string? ReadRows(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, List<SmtCopy> copies, bool bound)
     {
         using var rows = SmtResultPackageReader.Read(path, unit.ProblemCount).GetEnumerator();
 
@@ -297,6 +343,7 @@ internal static class SmtRoundIntake
                 ResourceCount = row.ResourceCount,
                 Fuel = row.Fuel,
                 Ticket = unit.Ticket,
+                Bound = bound,
                 SpoolOffset = offset,
                 SpoolLength = length
             });

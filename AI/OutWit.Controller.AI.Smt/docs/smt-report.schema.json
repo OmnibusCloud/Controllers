@@ -2,23 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-report.schema.json",
   "title": "Smt report",
-  "description": "The report of SmtRun (the blob Smt.Collect hands out): what the run ran with in short, the problem set as it was read, the verdicts and the unknowns by reason, the agreement with the expected verdicts, the evaluator's classes by logic, the copies and how the disputes ended, the problems answered unsat by one machine only, the long tail with the budget, the attribution from the problems' :source and :license, and for a run with enumerations the problems with exactly one model (kept) and those with two or more (dropped). Problems are named by their index in the set (the results give the id). No machine is named, and no duration is estimated anywhere.",
+  "description": "The report of SmtRun (the blob Smt.Collect hands out): what the run ran with in short, the problem set as it was read, the verdicts and the unknowns by reason, the agreement with the expected verdicts, the evaluator's classes by logic, the copies and how the disputes ended, the problems answered unsat by one machine only and the enumerations whose completeness rests on one machine, the long tail with the budget, the attribution from the problems' :source and :license, and for a run with enumerations the problems with exactly one model (kept) and those with two or more (dropped). Problems are named by their index in the set (the results give the id). No machine is named, and no duration is estimated anywhere.",
   "type": "object",
-  "required": ["schema", "run", "problem_set", "statuses", "verdicts", "unknown", "expected", "validation", "copies", "unsat_one_copy", "long_tail", "attribution"],
+  "required": ["schema", "run", "problem_set", "statuses", "verdicts", "unknown", "expected", "validation", "copies", "unsat_one_copy", "complete_one_copy", "long_tail", "attribution"],
   "additionalProperties": false,
   "properties": {
     "schema": { "type": "string", "const": "smt-report/1" },
     "run": {
       "type": "object",
-      "required": ["profile", "module_sha256", "controller", "sampling_rate", "sampling", "unanswered_packages", "options"],
+      "required": ["profile", "module_sha256", "controller", "sampling_rate", "sampling", "unanswered_packages", "binding", "options"],
       "additionalProperties": false,
       "properties": {
         "profile": { "type": "string", "description": "The solver profile." },
         "module_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the solver module the profile pins." },
         "controller": { "type": "string", "description": "The controller version the run ran on." },
         "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to solve on two machines, as the script stated it; null when it did not." },
-        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened: as_asked when every problem with an answer of a package asked for twice ended with two answers of one fan-out (the first, or the repair round that sent it out again to two machines) and as many such packages came back as the rate asks for; short otherwise (a repair pair that lost a copy again, or a package asked for twice of which at most one result came back). A package is known to have been asked for twice by the two results that came back under it, whatever they say, or by a rate that asks for every package." },
+        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened: as_asked when every problem with an answer of a package asked for twice ended with two answers of one fan-out (the first, or the repair round that sent it out again to two machines) and as many such packages came back as the rate asks for; short otherwise (a repair pair that lost a copy again, or a package asked for twice of which at most one result came back). A package is known to have been asked for twice by the two results that came back for it, whatever they say (a bound result for the package whose task it came back for, an unbound one under the ticket it names), or by a rate that asks for every package." },
         "unanswered_packages": { "type": "integer", "minimum": 0, "description": "Packages no taken answer came back for, every fan-out together." },
+        "binding": { "type": "string", "enum": ["bound", "unbound", "mixed", "none"], "description": "Whether the platform told the server which package each result came back for (Grid 1.4.0 and later tells the return collection of every fan-out the package of each task): bound when every result that came back was told, unbound when none was (an older Grid: copies are still compared by digest, and no answer is counted as a second machine, so nothing is settled copies), mixed when some were, none when no result came back. Only bound answers count as machines: two of them of one package in one fan-out were returned for two of its tasks, which the platform keeps on different machines. A machine is what the platform knows as a node: two nodes of one owner are two machines to it. The integrity document counts the results of each kind." },
         "options": { "description": "The options as resolved: numbers, never the word default.", "type": "object", "required": ["profile", "query", "max_models", "seed", "rlimit", "hard_cap_s", "fuel", "memory_mb", "sampling_rate"], "additionalProperties": false,
           "properties": {
             "profile": { "type": "string" },
@@ -101,7 +102,7 @@
       "required": ["two_or_more", "agreed", "disputed", "disputes", "settled_by"],
       "additionalProperties": false,
       "properties": {
-        "two_or_more": { "type": "integer", "description": "Problems answered by two machines or more: two answers or more, but not a lone answer of the first fan-out and a lone answer of the repair round, which may be one machine's (those are settled one_copy)." },
+        "two_or_more": { "type": "integer", "description": "Problems answered by two machines or more: two answers or more, but not answers not two of which came back bound in one fan-out, nor a lone answer of the first fan-out and a lone answer of the repair round, which may be one machine's (those are settled one_copy)." },
         "agreed": { "type": "integer", "description": "Of those, the problems whose answers all gave one digest." },
         "disputed": { "type": "integer", "description": "Problems that went to three more machines." },
         "disputes": {
@@ -125,6 +126,16 @@
       "required": ["count", "indices"],
       "additionalProperties": false,
       "description": "The problems answered unsat by one machine only (settled_by one_copy): nothing but that machine vouches for them.",
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true }
+      }
+    },
+    "complete_one_copy": {
+      "type": "object",
+      "required": ["count", "indices"],
+      "additionalProperties": false,
+      "description": "The enumerations that found models and say there is no other (verdict sat, complete true), by one machine only (settled_by one_copy): the server's evaluator checks the models, and that there is no other model is the solver's last unsat, which nothing but that machine vouches for. An enumeration that found no model is an unsat and is listed under unsat_one_copy.",
       "properties": {
         "count": { "type": "integer", "minimum": 0 },
         "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true }
@@ -179,15 +190,16 @@
     },
     "enumerate": {
       "type": "object",
-      "required": ["exactly_one", "two_or_more", "no_model", "undecided", "kept", "dropped"],
+      "required": ["exactly_one", "two_or_more", "no_model", "undecided", "kept", "kept_one_copy", "dropped"],
       "additionalProperties": false,
-      "description": "For a run with enumerations: kept, the problems with exactly one model (a complete enumeration of one); dropped, those with two or more.",
+      "description": "For a run with enumerations: kept, the problems with exactly one model (a complete enumeration of one); kept_one_copy, those of them settled by one machine, whose 'no other model' is that machine's word; dropped, those with two or more.",
       "properties": {
         "exactly_one": { "type": "integer", "minimum": 0 },
         "two_or_more": { "type": "integer", "minimum": 0 },
         "no_model": { "type": "integer", "minimum": 0, "description": "Complete enumerations that found no model." },
         "undecided": { "type": "integer", "minimum": 0, "description": "Enumerations that did not decide: one model and no word on a second, or none and no word." },
         "kept": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+        "kept_one_copy": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
         "dropped": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true }
       }
     }

@@ -5,10 +5,12 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 
 /// <summary>
 /// The run's in-process nodes with liars among them: a liar does the work honestly (it is the same
-/// sandbox) and then returns what <see cref="Lie"/> makes of every result package it made. Which
-/// nodes lie is <see cref="Liars"/>: none, the first, or all of them. A lie of null leaves the
-/// package as it was. The tests see the nodes as the server does: by what they return, never by
-/// who they are; the documents are then held to name none.
+/// sandbox) and then returns what <see cref="Lie"/> makes of every result package it made, or,
+/// with <see cref="Twice"/>, answers the first package of a share twice: once for its own task and
+/// once in place of the second package's result, which it leaves without an answer. Which nodes
+/// lie is <see cref="Liars"/>: none, the first, or all of them. A lie of null leaves the package as
+/// it was. The tests see the nodes as the server does: by what they return, never by who they are;
+/// the documents are then held to name none.
 /// </summary>
 internal sealed class SmtLyingNodesManager : IWitNodesManager
 {
@@ -22,6 +24,7 @@ internal sealed class SmtLyingNodesManager : IWitNodesManager
     #region Fields
 
     private readonly SmtTestNodesManager m_inner;
+    private readonly List<(string Doubled, string Robbed)> m_doubled = [];
     private int m_lies;
 
     #endregion
@@ -75,8 +78,13 @@ internal sealed class SmtLyingNodesManager : IWitNodesManager
     /// <summary>Puts the liar's word in place of every result package a liar returns.</summary>
     private async Task ReturnedAsync(Guid nodeId, IReadOnlyList<IWitVariable> variables)
     {
+        if (!IsLiar(nodeId))
+            return;
+
+        await TwiceAsync(variables);
+
         var lie = Lie;
-        if (lie == null || !IsLiar(nodeId))
+        if (lie == null)
             return;
 
         foreach (var variable in variables)
@@ -91,6 +99,31 @@ internal sealed class SmtLyingNodesManager : IWitNodesManager
             Interlocked.Increment(ref m_lies);
             variable.SetValue(forged);
         }
+    }
+
+    /// <summary>
+    /// The first package of a share answered twice: what <see cref="Twice"/> makes of its result
+    /// goes back under the second package's task, in place of that package's own result. A share
+    /// of one package has nothing to rob.
+    /// </summary>
+    private async Task TwiceAsync(IReadOnlyList<IWitVariable> variables)
+    {
+        var twice = Twice;
+        var results = variables.Where(variable => variable.Value is SmtResultPackageData { FaultCode.Length: 0 }).ToList();
+        if (twice == null || results.Count < 2)
+            return;
+
+        var doubled = (SmtResultPackageData)results[0].Value!;
+        var robbed = (SmtResultPackageData)results[1].Value!;
+        var second = await twice(doubled);
+        if (second == null)
+            return;
+
+        lock (m_doubled)
+            m_doubled.Add((doubled.Ticket, robbed.Ticket));
+
+        Interlocked.Increment(ref m_lies);
+        results[1].SetValue(second);
     }
 
     private bool IsLiar(Guid nodeId)
@@ -110,14 +143,36 @@ internal sealed class SmtLyingNodesManager : IWitNodesManager
     /// <summary>What a liar returns in place of an honest result package; null for an honest rig, and a lie that gives null leaves the package as it was.</summary>
     public Func<SmtResultPackageData, Task<SmtResultPackageData?>>? Lie { get; set; }
 
+    /// <summary>
+    /// What a liar returns under the task of the second package of a share, made of the first
+    /// package's result: a second answer of the first package; null for a rig that does not lie so,
+    /// and a lie that gives null leaves the share as it was.
+    /// </summary>
+    public Func<SmtResultPackageData, Task<SmtResultPackageData?>>? Twice { get; set; }
+
+    /// <summary>The tickets of the packages a liar answered twice, and of those it left without an answer for it, since the list was cleared.</summary>
+    public IReadOnlyList<(string Doubled, string Robbed)> Doubled
+    {
+        get
+        {
+            lock (m_doubled)
+                return m_doubled.ToList();
+        }
+    }
+
     /// <summary>Which nodes lie.</summary>
     public SmtLiars Liars { get; set; } = SmtLiars.First;
 
-    /// <summary>The result packages the liars replaced since the count was reset.</summary>
+    /// <summary>The result packages the liars replaced since the count was reset; setting it clears <see cref="Doubled"/> as well.</summary>
     public int Lies
     {
         get => Volatile.Read(ref m_lies);
-        set => Volatile.Write(ref m_lies, value);
+        set
+        {
+            Volatile.Write(ref m_lies, value);
+            lock (m_doubled)
+                m_doubled.Clear();
+        }
     }
 
     /// <summary>Shares given to a node since the manager was made.</summary>

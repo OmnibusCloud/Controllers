@@ -8,6 +8,7 @@
     "disagreements": 0,
     "one_copy": 0,
     "unsat_one_copy": 0,
+    "complete_one_copy": 0,
     "disputes": 0,
     "disputes_resolved": 0,
     "disputed": 0,
@@ -22,7 +23,7 @@
     "no_result": 0,
     "no_result_by_reason": {},
     "rejected_results": 0,
-    "rejected": { "unknown_ticket": 0, "duplicate": 0, "unreadable": 0, "content": 0, "surplus": 0 },
+    "rejected": { "unknown_ticket": 0, "duplicate": 0, "unreadable": 0, "content": 0, "surplus": 0, "other_package": 0 },
     "node_faults": 0,
     "node_faults_by_code": {
       "version_mismatch": 0, "package_invalid": 0, "ticket_invalid": 0, "package_too_large": 0, "package_hash_mismatch": 0, "package_unreadable": 0,
@@ -30,7 +31,10 @@
     },
     "sampling_rate": 1,
     "sampling": "as_asked",
-    "unanswered_packages": 0
+    "unanswered_packages": 0,
+    "binding": "bound",
+    "results_bound": 2,
+    "results_unbound": 0
   },
   "evaluator_solver_disagreements": [],
   "fan_outs": [

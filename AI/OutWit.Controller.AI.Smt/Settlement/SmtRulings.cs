@@ -7,15 +7,16 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// between two copies by what a node says of itself, and compares copies by their digests only:
 /// <list type="bullet">
 /// <item>a problem without an answer from the first fan-out (no taken row, or only rows of a fault
-/// of the node) is sent out once more, and so is a problem of a package the first fan-out asked
+/// of the node or of a node's refusal: a node refuses only what the host checked with the same
+/// code, so an honest node never refuses a problem the host took) is sent out once more, and so is a problem of a package the first fan-out asked
 /// for twice that came back with fewer than two answers (<see cref="NeedsRepair"/>): the repair
 /// round asks two machines for each of its packages. A problem that still has no answer has no
 /// result, with the code of what the nodes said last;</item>
 /// <item>copies that give one digest are one answer, and so is the one copy of a problem that was
 /// not sampled (it rests on one machine, and the documents say so). Two answers rest on two
-/// machines only when they come from one fan-out: Grid keeps the copies of one fan-out on
-/// different machines and guarantees nothing across fan-outs, so the lone answer of the first
-/// fan-out and a lone answer of the repair round may be one machine's
+/// machines only when both are bound and come from one fan-out (below): Grid keeps the copies of
+/// one fan-out on different machines and guarantees nothing across fan-outs, so the lone answer of
+/// the first fan-out and a lone answer of the repair round may be one machine's
 /// (<see cref="SmtFirstAnswers.TwoMachines"/>). The lone answer is still compared with the repair
 /// round's by digest. The answer's every model is checked by the host's evaluator;</item>
 /// <item>copies whose digests differ, and an answer whose model the evaluator calls failed, are a
@@ -28,14 +29,35 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// such and not as a lie.</item>
 /// </list>
 /// <para>
-/// <b>A dependency on the platform</b>, as for Verify: the host sees results, not machines.
-/// Counting answers as machines rests on Grid keeping one value for each return variable a node's
-/// tasks asked for (Grid 1.3.0 and later); held to it, a node that answers one package of a round
-/// twice has left another package of that round short, so in a dispute round an answer counts
-/// towards "two machines" only as far as it cannot be such a second answer (<see cref="Borrowable"/>).
-/// Which packages a rate falls on is the platform's choice too, and the host never learns it: a
-/// package is known to have been asked for twice by the results that came back under its ticket
-/// (<see cref="Sampled"/>).
+/// <b>A dependency on the platform.</b> The host sees results, not machines, and a result's ticket
+/// is the node's word: a node that holds packages A and B can return two results of A, one for
+/// each of its tasks. Grid 1.4.0 and later tell the host which package's task every result came
+/// back for (<see cref="SmtResultBindings"/>), and the intake refuses a result returned for
+/// another package than the one it names (<see cref="SmtRoundIntake.OTHER_PACKAGE"/>). What
+/// "bound" and "unbound" mean here:
+/// <list type="bullet">
+/// <item><b>Two machines.</b> Bound answers of one package in one fan-out were returned for
+/// different tasks of it, and Grid keeps the tasks of one item on different machines: they are
+/// that many machines (<see cref="SmtCopy.Bound"/>). Unbound answers under a ticket are one
+/// machine's word together, however many they are: <see cref="SmtRunWords.COPIES"/> needs two
+/// bound answers of one fan-out, and answers that are not both bound are still compared by digest
+/// and, when they agree, settled <see cref="SmtRunWords.ONE_COPY"/>. On a Grid older than 1.4.0
+/// no answer is ever a second machine.</item>
+/// <item><b>A dispute round.</b> A node that answers one package of a round twice has left
+/// another package of that round short, so an unbound answer counts towards "two machines" only as
+/// far as it cannot be such a second answer (<see cref="Borrowable"/>). A bound answer cannot be:
+/// a second answer returned for another package's task is refused, so the rule applies to the
+/// unbound answers only.</item>
+/// <item><b>Which packages were asked for twice.</b> The rate falls on packages the platform
+/// chooses and the host never learns. A package is known to have been asked for twice by two
+/// results that came back for it, whatever they say (<see cref="Sampled"/>): a bound result counts
+/// for the package whose task it came back for, a robbed package among them, an unbound one for
+/// the package it names. Two unbound results under a ticket may be one node's answer twice; the
+/// package is then taken as asked for twice all the same, which can only send more of it out
+/// again. The repair rule (<see cref="NeedsRepair"/>) and the sampling's state count answers,
+/// bound or not: whether two of them are two machines is the ruling's question, and the documents
+/// say how the run's results were bound.</item>
+/// </list>
 /// </para>
 /// </summary>
 internal static class SmtRulings
@@ -62,10 +84,12 @@ internal static class SmtRulings
     #region Functions
 
     /// <summary>
-    /// The tickets of the packages the first fan-out is known to have asked for twice: those under
-    /// which two results or more came back, whatever they say (an answer, a node's fault code, a
-    /// result the host refused), and every package when the rate asks for every one. A package of
-    /// which fewer than two results came back cannot be told from one asked for once.
+    /// The tickets of the packages the first fan-out is known to have asked for twice: those for
+    /// which two results or more came back (<see cref="SmtRound.Returned"/>: a bound result for the
+    /// package whose task it was returned for, an unbound one for the package it names), whatever
+    /// they say (an answer, a node's fault code, a result the host refused), and every package when
+    /// the rate asks for every one. A package of which fewer than two results came back cannot be
+    /// told from one asked for once.
     /// </summary>
     /// <param name="main">The first fan-out.</param>
     /// <param name="rate">The sampling rate the fan-out ran under, or null when the script does not say.</param>
@@ -108,10 +132,10 @@ internal static class SmtRulings
         var answers = main.Answers(index);
         var again = repair?.Answers(index) ?? [];
         if (repair == null || again.Count == 0)
-            return new SmtFirstAnswers(answers, main, answers.Count >= SAMPLE_COPIES, answers.Count > 0 && IsSurplus(main, index), false);
+            return new SmtFirstAnswers(answers, main, TwoMachines(answers), answers.Count > 0 && IsSurplus(main, index), false);
 
         return new SmtFirstAnswers([.. answers, .. again], repair,
-            answers.Count >= SAMPLE_COPIES || again.Count >= SAMPLE_COPIES,
+            TwoMachines(answers) || TwoMachines(again),
             (answers.Count > 0 && IsSurplus(main, index)) || IsSurplus(repair, index),
             true);
     }
@@ -136,10 +160,11 @@ internal static class SmtRulings
     }
 
     /// <summary>
-    /// For every package of a dispute round, the most of its answers that may be a second answer
-    /// of one machine: every package of the round was asked for in <see cref="DISPUTE_COPIES"/>
-    /// copies, so the answers a node can spend on a package beyond its own are the answers the
-    /// other packages of the round are short of.
+    /// For every package of a dispute round, the most of its unbound answers that may be a second
+    /// answer of one machine: every package of the round was asked for in
+    /// <see cref="DISPUTE_COPIES"/> copies, so the answers a node can spend on a package beyond its
+    /// own are the answers the other packages of the round are short of. A bound answer is never
+    /// one of them: one returned for another package's task is refused at the intake.
     /// </summary>
     /// <param name="dispute">The dispute round.</param>
     /// <returns>By ticket: the answers the other packages of the round are short of, together.</returns>
@@ -183,6 +208,12 @@ internal static class SmtRulings
 
     #region Tools
 
+    /// <summary>Whether answers of one problem in one fan-out are two machines': two of them bound (<see cref="SmtCopy.Bound"/>).</summary>
+    private static bool TwoMachines(IReadOnlyList<SmtCopy> answers)
+    {
+        return answers.Count(answer => answer.Bound) >= SAMPLE_COPIES;
+    }
+
     private static bool IsSurplus(SmtRound round, int index)
     {
         return round.UnitOf.TryGetValue(index, out var unit) && round.Surplus.Contains(unit.Ticket);
@@ -213,9 +244,11 @@ internal static class SmtRulings
         if (most < MAJORITY || most <= next)
             return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.NO_MAJORITY), first.Count + votes.Count, repaired);
 
-        // Two machines must have given the leading digest. Of its answers, as many as the other
-        // packages of the round are short of may be one machine's second, and do not count.
-        var machines = most - borrowable.GetValueOrDefault(unit.Ticket);
+        // Two machines must have given the leading digest. Its bound answers are as many machines;
+        // of its unbound ones, as many as the other packages of the round are short of may be one
+        // machine's second, and do not count.
+        var bound = groups[0].Count(vote => vote.Bound);
+        var machines = bound + Math.Max(0, most - bound - borrowable.GetValueOrDefault(unit.Ticket));
         if (machines < MAJORITY || machines <= next)
             return SmtRuling.Disputed(index, new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.SURPLUS_COPIES), first.Count + votes.Count, repaired);
 

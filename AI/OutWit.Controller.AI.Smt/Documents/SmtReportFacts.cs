@@ -7,9 +7,10 @@ namespace OutWit.Controller.AI.Smt.Documents;
 /// <summary>
 /// What the report says of a run, counted as the rows of the results are written: the statuses,
 /// the verdicts, the unknowns by reason, the expected agreement, the evaluator's classes by logic,
-/// the copies and how disputes ended, the long tail, the attribution, and for enumerations the
-/// problems with exactly one model and those with more. A record a problem at most (the long tail
-/// and the lists of indices), never a model.
+/// the copies and how disputes ended, the claims that rest on one machine and that nothing but it
+/// vouches for (an <c>unsat</c>, and the completeness of an enumeration that found models), the
+/// long tail, the attribution, and for enumerations the problems with exactly one model and those
+/// with more. A record a problem at most (the long tail and the lists of indices), never a model.
 /// </summary>
 internal sealed class SmtReportFacts
 {
@@ -76,6 +77,12 @@ internal sealed class SmtReportFacts
         if (row.Verdict == SmtResultWords.UNSAT && ruling.SettledBy == SmtRunWords.ONE_COPY)
             UnsatOneCopy.Add(data.Index);
 
+        // An enumeration that found models and says there is no other: its completeness is the
+        // solver's last unsat, which the evaluator does not check. Without a model it is an unsat
+        // and is listed above.
+        if (data.Query == SmtQuery.Enumerate && row.Complete && row.Verdict == SmtResultWords.SAT && ruling.SettledBy == SmtRunWords.ONE_COPY)
+            CompleteOneCopy.Add(data.Index);
+
         if (ruling.Check.Class != SmtRunWords.NOT_CHECKED)
         {
             CountClass(problem.Logic ?? "", ruling.Check.Class);
@@ -86,7 +93,7 @@ internal sealed class SmtReportFacts
         Tail.Add(new SmtTailEntry(data.Index, row.ResourceCount, row.Fuel, StoppedBy(row)));
 
         if (data.Query == SmtQuery.Enumerate && row.Status == SmtResultWords.OK)
-            CountEnumeration(data.Index, row);
+            CountEnumeration(data.Index, row, ruling.SettledBy == SmtRunWords.ONE_COPY);
     }
 
     /// <summary>The long tail, sorted: the most fuel first, then the largest resource count, then the index.</summary>
@@ -139,10 +146,14 @@ internal sealed class SmtReportFacts
         Attributions[key] = 1;
     }
 
-    private void CountEnumeration(int index, SmtResultData row)
+    private void CountEnumeration(int index, SmtResultData row, bool oneCopy)
     {
         if (row.Count == 1 && row.Complete)
+        {
             ExactlyOne.Add(index);
+            if (oneCopy)
+                KeptOneCopy.Add(index);
+        }
         else if (row.Count >= 2)
             TwoOrMore.Add(index);
         else if (row.Count == 0 && row.Complete)
@@ -191,6 +202,9 @@ internal sealed class SmtReportFacts
     /// <summary>The problems answered <c>unsat</c> by one machine only (settled by <see cref="SmtRunWords.ONE_COPY"/>).</summary>
     public List<int> UnsatOneCopy { get; } = [];
 
+    /// <summary>The enumerations that found models and say there is no other, by one machine only: their completeness is that machine's word.</summary>
+    public List<int> CompleteOneCopy { get; } = [];
+
     /// <summary>Every problem with a settled row, with what it cost.</summary>
     public List<SmtTailEntry> Tail { get; } = [];
 
@@ -205,6 +219,9 @@ internal sealed class SmtReportFacts
 
     /// <summary>The enumerations that found exactly one model and showed there is no other.</summary>
     public List<int> ExactlyOne { get; } = [];
+
+    /// <summary>Of those, the ones settled by one machine: that there is no other model is that machine's word.</summary>
+    public List<int> KeptOneCopy { get; } = [];
 
     /// <summary>The enumerations that found two models or more.</summary>
     public List<int> TwoOrMore { get; } = [];

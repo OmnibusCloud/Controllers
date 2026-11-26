@@ -1,3 +1,5 @@
+using OutWit.Controller.AI.Smt.Model;
+
 namespace OutWit.Controller.AI.Smt.Settlement;
 
 /// <summary>
@@ -35,11 +37,14 @@ internal sealed class SmtIntegrityFacts
     /// <summary>Of those, the problems whose answers gave more than one digest.</summary>
     public int Disagreements { get; set; }
 
-    /// <summary>The problems whose answer rests on one machine: one answer, or a lone answer of the first fan-out and one of the repair round with its digest.</summary>
+    /// <summary>The problems whose answer rests on one machine: one answer, answers not two of which are bound in one fan-out, or a lone answer of the first fan-out and one of the repair round with its digest.</summary>
     public int OneCopy { get; set; }
 
     /// <summary>Of those, the problems answered <c>unsat</c>: nothing but that machine vouches for them.</summary>
     public int UnsatOneCopy { get; set; }
+
+    /// <summary>Of those, the enumerations that found models and say there is no other: their completeness is the solver's last <c>unsat</c>, which nothing but that machine vouches for.</summary>
+    public int CompleteOneCopy { get; set; }
 
     /// <summary>The disputes, ordered by index.</summary>
     public List<SmtDisputeRecord> Disputes { get; } = [];
@@ -88,6 +93,21 @@ internal sealed class SmtIntegrityFacts
 
     /// <summary>The packages of problems no taken answer came back for, every fan-out together.</summary>
     public int UnansweredPackages => FanOuts.Sum(fanOut => fanOut.Unanswered);
+
+    /// <summary>The result references that came back bound (the platform told the host which package's task each was returned for), every round together.</summary>
+    public int BoundResults { get; set; }
+
+    /// <summary>The result references that came back unbound, every round together.</summary>
+    public int UnboundResults { get; set; }
+
+    /// <summary>The run's binding, one of <see cref="SmtRunWords.BINDINGS"/>.</summary>
+    public string Binding => (BoundResults, UnboundResults) switch
+    {
+        (0, 0) => SmtRunWords.NO_RESULTS,
+        (_, 0) => SmtRunWords.BOUND,
+        (0, _) => SmtRunWords.UNBOUND,
+        _ => SmtRunWords.MIXED
+    };
 
     #endregion
 }
