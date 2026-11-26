@@ -7,7 +7,8 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// between two copies by what a node says of itself, and compares copies by their digests only:
 /// <list type="bullet">
 /// <item>a problem without an answer from the first fan-out (no taken row, or only rows of a fault
-/// of the node) is sent out once more, and so is a problem of a package the first fan-out asked
+/// of the node or of a node's refusal: a node refuses only what the host checked with the same
+/// code, so an honest node never refuses a problem the host took) is sent out once more, and so is a problem of a package the first fan-out asked
 /// for twice that came back with fewer than two answers (<see cref="NeedsRepair"/>): the repair
 /// round asks two machines for each of its packages. A problem that still has no answer has no
 /// result, with the code of what the nodes said last;</item>

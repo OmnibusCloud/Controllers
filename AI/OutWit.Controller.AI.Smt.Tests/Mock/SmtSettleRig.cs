@@ -159,6 +159,21 @@ internal sealed class SmtSettleRig : IDisposable
         return row;
     }
 
+    /// <summary>A row of a node that refused the problem before a session started: a code of the refusals, and nothing run.</summary>
+    /// <param name="code">The refusal's code.</param>
+    /// <returns>The row, without its problem and digest.</returns>
+    public static SmtResultData Refusal(string code)
+    {
+        var row = Row(SmtResultWords.REFUSED, SmtResultWords.NONE, SmtResultWords.NONE, [], []);
+        row.Code = code;
+        row.Message = "the node refused the problem";
+        row.Checks = 0;
+        row.ResourceCount = 0;
+        row.Fuel = 0;
+        row.PeakMemoryBytes = 0;
+        return row;
+    }
+
     /// <summary>A row of a status and a verdict with what a session gives with them.</summary>
     /// <param name="status">The status.</param>
     /// <param name="verdict">The verdict.</param>

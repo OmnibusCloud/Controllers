@@ -67,6 +67,13 @@ public static class SmtRunWords
     /// <summary>The reason of a problem without a result whose package no accepted answer came back for.</summary>
     public const string NO_ANSWER = "no_answer";
 
+    /// <summary>
+    /// The reason of a repair, and of a problem left without a result, whose copies were a node's
+    /// refusal of it: a node refused a problem the host had taken. A node refuses only for what the
+    /// host checks with the same code before it makes a package, so a refusal is no answer.
+    /// </summary>
+    public const string NODE_REFUSED = "node_refused";
+
     /// <summary>A dispute's cause: the copies' digests differ.</summary>
     public const string DIGESTS_DIFFER = "digests_differ";
 

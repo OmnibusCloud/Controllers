@@ -39,7 +39,7 @@ internal sealed class SmtRound
         return Copies.TryGetValue(index, out var copies) ? copies : [];
     }
 
-    /// <summary>The copies of a problem in this round that are answers: every one but a fault of its node.</summary>
+    /// <summary>The copies of a problem in this round that are answers: every one but a fault of its node and a node's refusal.</summary>
     /// <param name="index">The problem.</param>
     /// <returns>The answers.</returns>
     public List<SmtCopy> Answers(int index)

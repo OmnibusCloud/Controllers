@@ -177,15 +177,16 @@ internal static class SmtRunSettlement
     }
 
     /// <summary>
-    /// What a round said of a problem it gave no answer for: the code of its node's fault when
-    /// every taken copy is one, else what became of its package (a node's fault code, the reason a
-    /// result was refused, or no answer at all).
+    /// What a round said of a problem it gave no answer for: when it took copies that are no
+    /// answers, <see cref="SmtRunWords.NODE_REFUSED"/> for a node's refusal and the code of its
+    /// node's fault for a fault (the copy first in the order of their digests); else what became of
+    /// its package (a node's fault code, the reason a result was refused, or no answer at all).
     /// </summary>
     private static string ReasonIn(SmtRound round, int index, IReadOnlyDictionary<int, string> unanswered)
     {
         var faults = round.Of(index);
         if (faults.Count > 0)
-            return faults[0].Code.Length > 0 ? faults[0].Code : SmtResultWords.NODE_FAULT;
+            return faults[0].IsRefusal ? SmtRunWords.NODE_REFUSED : faults[0].Code.Length > 0 ? faults[0].Code : SmtResultWords.NODE_FAULT;
 
         if (round.UnitOf.TryGetValue(index, out var unit))
             return round.FateOf(unit.Ticket) is { Length: > 0 } fate ? fate : SmtRunWords.NO_ANSWER;

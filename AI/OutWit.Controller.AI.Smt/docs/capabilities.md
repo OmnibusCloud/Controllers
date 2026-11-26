@@ -104,7 +104,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | Field | |
 |---|---|
 | `index`, `id`, `query`, `logic` | the row; `query` and `logic` for a taken problem only |
-| `status`, `code`, `message` | `ok`, `refused`, `input_error`, `output_exceeded`, `engine_crash`, or the server's `no_result` (no node answered, after the repair round either; `code` says what the nodes said last) and `disputed` (copies disagreed and three more did not settle it; `code` is the dispute's outcome) |
+| `status`, `code`, `message` | `ok`, `refused` (by the set or the server's sanitizer), `input_error`, `output_exceeded`, `engine_crash`, or the server's `no_result` (no node answered, after the repair round either; `code` says what the nodes said last, `node_refused` when every node refused the problem) and `disputed` (copies disagreed and three more did not settle it; `code` is the dispute's outcome) |
 | `verdict`, `reason` | `sat`, `unsat`, `unknown` (with `rlimit`, `fuel`, `memout`, `incomplete` or `other`), `none` |
 | `expected`, `expected_agreement` | the verdict the row or the problem's `:status` expects, and `agree`, `disagree` or `n/a` |
 | `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
@@ -183,6 +183,13 @@ What holds:
   another) is refused (`rejected.other_package`), and the package it came back for goes out again
   as a package without an answer. A package a node could not work on, and a problem whose session a
   node could not end, go out once more, to two machines.
+- **A node's refusal is no answer.** A node refuses a problem only for what the server has
+  already checked with the same code before it made the package (the sanitizer took the text and
+  gave its hash, the options and the terms beside the problem were held to their rules), so an
+  honest node never refuses a problem the server took. A refusal goes out once more like a
+  problem without an answer (`repairs_by_reason.node_refused`, or `copies_short` beside an answer
+  of a package asked for twice); a problem every node refused has no result, with the code
+  `node_refused`.
 - **The sampling asked for is restored.** A problem of a package asked for twice that came back
   with one answer (the other copy refused by its node, refused by the server, or a fault of the
   node) goes out again to two machines, and the integrity document counts it as `copies_short`.

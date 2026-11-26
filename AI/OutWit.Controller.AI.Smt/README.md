@@ -328,7 +328,10 @@ counted as a node's unreadable result.
 
 **Settling** (`SmtRulings`), problem by problem in the set's order:
 
-- The first round's answers are ruled on (a row of a fault of the node is no answer). Two kinds of
+- The first round's answers are ruled on (a row of a fault of the node is no answer, and nor is a
+  node's refusal: a node refuses only what the host checked with the same code before it made the
+  package, so an honest node never refuses a problem the host took; such a problem goes out again
+  under `node_refused`, and one every node refused is `no_result` with that code). Two kinds of
   problem go out once more, in the repair round, which asks two machines for every package
   (`Grid.Replicas(2)`): a problem with no answer, and a problem of a package the first round asked
   for twice that came back with fewer than two answers (a copy a node refused with its fault code,
