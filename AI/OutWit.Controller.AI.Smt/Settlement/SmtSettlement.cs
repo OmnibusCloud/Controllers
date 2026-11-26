@@ -25,6 +25,9 @@ internal static class SmtSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="spool">Where whole rows are kept, or null when only the comparison is needed.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
     public static Task<SmtRound> ReadMainAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null)
     {
         return SmtRoundIntake.ReadAsync(SmtRound.MAIN, issued, returned, SmtRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool);
@@ -36,6 +39,9 @@ internal static class SmtSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="spool">Where whole rows are kept, or null.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
     public static Task<SmtRound> ReadRepairAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null)
     {
         return SmtRoundIntake.ReadAsync(SmtRound.REPAIR, issued, returned, SmtRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool);
@@ -47,6 +53,9 @@ internal static class SmtSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="spool">Where whole rows are kept, or null.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
     public static Task<SmtRound> ReadDisputeAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null)
     {
         return SmtRoundIntake.ReadAsync(SmtRound.DISPUTE, issued, returned, SmtRulings.DISPUTE_COPIES, surplusIsSuspect: false, blobs, spool);
@@ -63,6 +72,8 @@ internal static class SmtSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="folder">A folder of the host's own for the package files.</param>
     /// <returns>The references; empty when every problem has the answers it was asked for.</returns>
+    /// <exception cref="SmtPackageException">A package of problems this host made cannot be read again: the run cannot go on.</exception>
+    /// <exception cref="IOException">The host's own files could not be read or written.</exception>
     public static Task<List<SmtTaskPackageData>> PublishRepairsAsync(SmtRound main, double? rate, IWitBlobService blobs, string folder)
     {
         var sampled = SmtRulings.Sampled(main, rate);
@@ -92,6 +103,8 @@ internal static class SmtSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="folder">A folder of the host's own for the package files.</param>
     /// <returns>The references, and how many problems went for each cause.</returns>
+    /// <exception cref="SmtPackageException">A package of problems this host made cannot be read again: the run cannot go on.</exception>
+    /// <exception cref="IOException">The host's own files could not be read or written.</exception>
     public static async Task<(List<SmtTaskPackageData> Packages, SortedDictionary<string, int> Causes)> PublishDisputesAsync(SmtRound main, SmtRound? repair, SmtSpool spool,
         IWitBlobService blobs, string folder)
     {
@@ -144,6 +157,8 @@ internal static class SmtSettlement
     /// <param name="spool">The spool the copies' rows were kept in.</param>
     /// <param name="blobs">The host's blob service.</param>
     /// <returns>The checks, by problem and digest.</returns>
+    /// <exception cref="SmtPackageException">A package of problems this host made cannot be read again: the run cannot go on.</exception>
+    /// <exception cref="IOException">The host's own files could not be read or written.</exception>
     public static async Task<Dictionary<(int Index, SmtDigestKey Digest), SmtModelCheck>> CheckAsync(IEnumerable<(SmtRound Round, SmtCopy Copy)> copies, SmtSpool spool, IWitBlobService blobs)
     {
         var checks = new Dictionary<(int, SmtDigestKey), SmtModelCheck>();
@@ -156,7 +171,7 @@ internal static class SmtSettlement
             using var reader = new SmtTaskPackageReader(await blobs.GetLocalPathAsync(unit.ProblemsBlobId), unit.ProblemCount);
             while (reader.TryRead(out var problem))
             {
-                if (!wanted.TryGetValue(problem!.Index, out var rows))
+                if (!wanted.TryGetValue(problem.Index, out var rows))
                     continue;
 
                 var evaluator = SmtHostEvaluator.Of(problem);
@@ -230,8 +245,8 @@ internal static class SmtSettlement
             using var reader = new SmtTaskPackageReader(await blobs.GetLocalPathAsync(unit.ProblemsBlobId), unit.ProblemCount);
             while (reader.TryRead(out var problem))
             {
-                if (indices == null || indices.Contains(problem!.Index))
-                    await publisher.AddAsync(problem!);
+                if (indices == null || indices.Contains(problem.Index))
+                    await publisher.AddAsync(problem);
             }
         }
 

@@ -74,7 +74,7 @@ internal sealed class SmtSolvePlan
         {
             var term = SmtSanitizer.SanitizeTerm(texts[index] ?? "");
             if (!term.IsAccepted)
-                return In(term.Refusal!, $"values[{index}]");
+                return In(term.Refusal, $"values[{index}]");
 
             terms.Add(term.Term);
         }
@@ -108,7 +108,7 @@ internal sealed class SmtSolvePlan
 
         var term = SmtSanitizer.SanitizeTerm(data.Goal);
         if (!term.IsAccepted)
-            return In(term.Refusal!, "goal");
+            return In(term.Refusal, "goal");
 
         Goal = term.Term;
         return null;

@@ -35,6 +35,9 @@ the layout the runtime reads at start-up.
    `sat` model, and writes the documents into one ledger blob.
 6. **Documents.** `Smt.CollectResults`, `Smt.Collect`, `Smt.Provenance` and `Smt.Integrity` hand
    the results, the report, the provenance and the integrity document out of the ledger.
+7. **Forget.** `Smt.Forget` empties `solved`, `repaired` and `settled`: what the fan-outs
+   returned, in the order the platform kept it, one node's results after another's, is not left
+   in the finished job, whose variables its submitter can read.
 
 The work is split once and sent once; the repair round and the dispute round are the only second
 sends. What the documents say and what a lab can rely on is the controller's
@@ -42,7 +45,8 @@ sends. What the documents say and what a lab can rely on is the controller's
 
 ## Compatibility
 
-The scripts call the activities the controller has since 0.4.0. The package's compatibility
+The scripts call the activities the controller has since 0.4.0, and `Smt.Forget`, which it has
+since the version that follows 0.5.0. The package's compatibility
 marker (a reference to the controller with a half-open range, as the repository's decision record
 on scripts and controller versions has it) is written in the project and commented out while no
 controller is on nuget.org; it waits for the first public release, `[1.0.0, 2.0.0)`, and a test

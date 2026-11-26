@@ -45,19 +45,40 @@ public sealed class SmtExpression
 
     /// <summary>
     /// Makes an atom that is neither a symbol nor a list: a keyword, a numeral, a decimal, a
-    /// hexadecimal or binary literal with its token, or a string with its content.
+    /// hexadecimal or binary literal with its token, or a string with its content. An atom is
+    /// written as its text, so the text of every kind but a string must be one whole token of that
+    /// kind, as the reader reads it (of any length: the reader's limits are a problem's, not an
+    /// atom's): written back, the atom reads as the same atom again, and never closes the list it
+    /// stands in. A string keeps any content: its writer doubles its quotes.
     /// </summary>
     /// <param name="kind">The atom's kind.</param>
     /// <param name="text">The token, or a string's content.</param>
     /// <param name="line">The line it started on (1-based), 0 when made by a program.</param>
     /// <returns>The atom.</returns>
-    /// <exception cref="ArgumentException">The kind is a list or a symbol.</exception>
+    /// <exception cref="ArgumentNullException">The text is null.</exception>
+    /// <exception cref="ArgumentException">The kind is a list or a symbol, or the text is not one token of the kind.</exception>
     public static SmtExpression Atom(SmtExpressionKind kind, string text, int line = 0)
     {
         ArgumentNullException.ThrowIfNull(text);
         if (kind is SmtExpressionKind.List or SmtExpressionKind.Symbol)
             throw new ArgumentException($"an atom of kind {kind} is made by its own factory", nameof(kind));
 
+        if (kind != SmtExpressionKind.String && !IsTokenOf(kind, text))
+            throw new ArgumentException($"the text is not one {kind.ToString().ToLowerInvariant()} token", nameof(text));
+
+        return new SmtExpression(kind, text, NO_ITEMS, line, false);
+    }
+
+    /// <summary>
+    /// Makes an atom of a token the reader has classified already, without classifying it again.
+    /// Also for the tests, which write tokens no reader takes on purpose.
+    /// </summary>
+    /// <param name="kind">The atom's kind: neither a list nor a symbol.</param>
+    /// <param name="text">The token as the reader read it.</param>
+    /// <param name="line">The line it started on (1-based).</param>
+    /// <returns>The atom.</returns>
+    internal static SmtExpression Token(SmtExpressionKind kind, string text, int line)
+    {
         return new SmtExpression(kind, text, NO_ITEMS, line, false);
     }
 
@@ -255,6 +276,22 @@ public sealed class SmtExpression
             throw new ArgumentException("a symbol's name holds no bar and no backslash", nameof(name));
 
         return name;
+    }
+
+    /// <summary>Whether a text is one whole token of a kind, as the reader classifies a bare token.</summary>
+    private static bool IsTokenOf(SmtExpressionKind kind, string text)
+    {
+        if (text.Length == 0)
+            return false;
+
+        try
+        {
+            return SmtBareToken.Classify(text, SmtReaderLimits.Unbounded, 0, 0).Kind == kind;
+        }
+        catch (SmtSyntaxException)
+        {
+            return false;
+        }
     }
 
     #endregion

@@ -25,6 +25,8 @@ namespace OutWit.Controller.AI.Smt;
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
 public sealed class WitControllerSmtModule : WitPluginBase, IWitControllerNode, IWitControllerHost
 {
+    #region WitPluginBase
+
     /// <summary>Registers the Smt variables, collections and activity adapters.</summary>
     /// <param name="services">The service collection of the engine host or node.</param>
     public override void Initialize(IServiceCollection services)
@@ -51,5 +53,8 @@ public sealed class WitControllerSmtModule : WitPluginBase, IWitControllerNode, 
         services.AddActivityAdapter<WitActivitySmtProvenance, WitActivityAdapterSmtProvenance>();
         services.AddActivityAdapter<WitActivitySmtIntegrity, WitActivityAdapterSmtIntegrity>();
         services.AddActivityAdapter<WitActivitySmtPreflight, WitActivityAdapterSmtPreflight>();
+        services.AddActivityAdapter<WitActivitySmtForget, WitActivityAdapterSmtForget>();
     }
+
+    #endregion
 }

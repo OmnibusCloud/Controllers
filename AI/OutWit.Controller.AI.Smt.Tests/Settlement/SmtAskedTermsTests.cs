@@ -84,6 +84,25 @@ public sealed class SmtAskedTermsTests
         Assert.That(SmtHostChecks.AskedByASession(enumeration), Is.Null);
     }
 
+    [Test]
+    public void TheHostReadsAProjectionAsTheSessionReadsItTest()
+    {
+        // One reading of a projection for the reader of a set, the node and the host: a
+        // projection the reader would refuse (a constant named twice, no name at all) has no
+        // session that asks for values, and no terms on the host either.
+        var enumeration = SmtHostChecks.Problem(Line(new() { ["id"] = "p0", ["query"] = "enumerate", ["smt2"] = PROBLEM, ["project"] = new[] { "x" } }));
+
+        Assert.Multiple(() =>
+        {
+            foreach (var project in new[] { new[] { "x", "x" }, new[] { "x", "|x|" }, Array.Empty<string>() })
+            {
+                enumeration.Project = [.. project];
+                Assert.That(SmtHostChecks.AskedByASession(enumeration), Is.Null, $"[{string.Join(", ", project)}]: no session");
+                Assert.That(SmtHostChecks.AskedByTheHost(enumeration), Is.Null, $"[{string.Join(", ", project)}]: and no terms on the host");
+            }
+        });
+    }
+
     #endregion
 
     #region Tools

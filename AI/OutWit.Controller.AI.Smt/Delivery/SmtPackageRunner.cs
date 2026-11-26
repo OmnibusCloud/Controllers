@@ -165,11 +165,11 @@ internal static class SmtPackageRunner
                         reader.Dispose();
                 }
 
-                var outcome = solve(problem!, options, cancellationToken);
+                var outcome = solve(problem, options, cancellationToken);
                 if (outcome.Status == SmtSolveStatus.NodeFault && outcome.Code != SmtSolveCodes.CANCELLED)
-                    logger.LogWarning("Smt: problem {Index} has no answer on this node: {Code}", problem!.Index, outcome.Code);
+                    logger.LogWarning("Smt: problem {Index} has no answer on this node: {Code}", problem.Index, outcome.Code);
 
-                writer.Write(SmtResultRows.Of(problem!, outcome, package.Ticket));
+                writer.Write(SmtResultRows.Of(problem, outcome, package.Ticket));
                 problemDone?.Invoke();
             }, cancellationToken).ConfigureAwait(false);
 

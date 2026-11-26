@@ -59,7 +59,7 @@ internal static class SmtBareToken
         if (!SmtLexicon.IsSimpleSymbol(token[1..]))
             throw new SmtSyntaxException(SmtSyntaxFault.MalformedToken, line, column, "a keyword is a colon and a simple symbol");
 
-        return SmtExpression.Atom(SmtExpressionKind.Keyword, token.ToString(), line);
+        return SmtExpression.Token(SmtExpressionKind.Keyword, token.ToString(), line);
     }
 
     private static SmtExpression Literal(ReadOnlySpan<char> token, SmtReaderLimits limits, int line, int column)
@@ -72,7 +72,7 @@ internal static class SmtBareToken
             if ((long)digits.Length * BITS_PER_HEXADECIMAL_DIGIT > limits.MaxLiteralBits)
                 throw TooWide(limits, line, column);
 
-            return SmtExpression.Atom(SmtExpressionKind.Hexadecimal, token.ToString(), line);
+            return SmtExpression.Token(SmtExpressionKind.Hexadecimal, token.ToString(), line);
         }
 
         if (mark == BINARY_MARK && !digits.IsEmpty && All(digits, SmtLexicon.IsBinaryDigit))
@@ -80,7 +80,7 @@ internal static class SmtBareToken
             if (digits.Length > limits.MaxLiteralBits)
                 throw TooWide(limits, line, column);
 
-            return SmtExpression.Atom(SmtExpressionKind.Binary, token.ToString(), line);
+            return SmtExpression.Token(SmtExpressionKind.Binary, token.ToString(), line);
         }
 
         throw new SmtSyntaxException(SmtSyntaxFault.MalformedToken, line, column, "a literal that starts with # is #x and hexadecimal digits, or #b and binary digits");
@@ -101,7 +101,7 @@ internal static class SmtBareToken
         if (whole.Length + fraction.Length > limits.MaxNumeralDigits)
             throw new SmtSyntaxException(SmtSyntaxFault.NumeralTooLong, line, column, $"a number has more than the {limits.MaxNumeralDigits} digits allowed");
 
-        return SmtExpression.Atom(dot < 0 ? SmtExpressionKind.Numeral : SmtExpressionKind.Decimal, token.ToString(), line);
+        return SmtExpression.Token(dot < 0 ? SmtExpressionKind.Numeral : SmtExpressionKind.Decimal, token.ToString(), line);
     }
 
     private static SmtSyntaxException TooWide(SmtReaderLimits limits, int line, int column)

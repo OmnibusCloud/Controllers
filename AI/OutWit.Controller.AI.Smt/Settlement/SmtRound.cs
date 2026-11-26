@@ -15,11 +15,14 @@ internal sealed class SmtRound
     /// <summary>The first fan-out of a run.</summary>
     public const string MAIN = "main";
 
-    /// <summary>The fan-out of problems without an answer, sent out once more.</summary>
+    /// <summary>The fan-out of problems without an answer, and of problems of a package asked for twice that came back short of a copy, sent out once more.</summary>
     public const string REPAIR = "repair";
 
     /// <summary>The fan-out of problems whose copies disagreed or whose model the evaluator called failed, in three copies.</summary>
     public const string DISPUTE = "dispute";
+
+    /// <summary>Every fan-out of a run, in the order a run makes them.</summary>
+    public static readonly IReadOnlyList<string> NAMES = [MAIN, REPAIR, DISPUTE];
 
     #endregion
 

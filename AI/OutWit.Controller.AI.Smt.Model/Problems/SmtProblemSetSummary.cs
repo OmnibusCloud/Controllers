@@ -75,7 +75,7 @@ public sealed class SmtProblemSetSummary
         }
 
         Refused++;
-        Count(m_codes, row.Refusal!.Code);
+        Count(m_codes, row.Refusal.Code);
 
         // A copy: the row's own record is the caller's to keep or to change.
         if (m_refusals.Count < SmtProblemSetLimits.MAX_REFUSALS_KEPT)

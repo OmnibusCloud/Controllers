@@ -84,7 +84,7 @@ public static class SmtProjection
         if (!term.IsAccepted)
         {
             // The refusal of a term, with the field the term stands in said first.
-            term.Refusal!.Reason = $"'project[{index}]': {term.Refusal.Reason}";
+            term.Refusal.Reason = $"'project[{index}]': {term.Refusal.Reason}";
             return term.Refusal;
         }
 

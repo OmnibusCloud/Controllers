@@ -13,5 +13,4 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// answer of the repair round: Grid guarantees nothing across fan-outs.
 /// </param>
 /// <param name="Surplus">Whether a round that gave answers among them took more results under the problem's ticket than it asked for.</param>
-/// <param name="Repaired">Whether the repair round's answers are among them.</param>
-internal sealed record SmtFirstAnswers(List<SmtCopy> Answers, SmtRound Round, bool TwoMachines, bool Surplus, bool Repaired);
+internal sealed record SmtFirstAnswers(List<SmtCopy> Answers, SmtRound Round, bool TwoMachines, bool Surplus);

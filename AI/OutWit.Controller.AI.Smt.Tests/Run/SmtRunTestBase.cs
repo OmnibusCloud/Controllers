@@ -103,13 +103,34 @@ public abstract class SmtRunTestBase
         return await Blobs.UploadBytesAsync(Encoding.UTF8.GetBytes(text), name);
     }
 
+    /// <summary>
+    /// The text of SmtRun without its last statements, which empty what the fan-outs returned:
+    /// for a test that looks at those variables after the run, as the activities read them.
+    /// </summary>
+    /// <returns>The script's text.</returns>
+    protected static string ScriptKeepingResults()
+    {
+        var lines = Script("SmtRun.wit").Split('\n').Where(line => !line.Contains("= Smt.Forget(", StringComparison.Ordinal));
+        return string.Join('\n', lines);
+    }
+
     /// <summary>Runs SmtRun on a set and reads its documents.</summary>
     /// <param name="set">The set's text.</param>
     /// <param name="options">The run's options.</param>
     /// <returns>The run.</returns>
-    private protected async Task<SmtRunDocuments> RunAsync(string set, SmtOptionsData options)
+    private protected Task<SmtRunDocuments> RunAsync(string set, SmtOptionsData options)
     {
-        var job = Engine.Compile(Script("SmtRun.wit"));
+        return RunAsync(set, options, Script("SmtRun.wit"));
+    }
+
+    /// <summary>Runs a script of SmtRun's signature on a set and reads its documents.</summary>
+    /// <param name="set">The set's text.</param>
+    /// <param name="options">The run's options.</param>
+    /// <param name="script">The script's text.</param>
+    /// <returns>The run.</returns>
+    private protected async Task<SmtRunDocuments> RunAsync(string set, SmtOptionsData options, string script)
+    {
+        var job = Engine.Compile(script);
         var status = await Engine.ScheduleAndWaitAsync(job, await UploadAsync(set, "problems.jsonl"), options);
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
 

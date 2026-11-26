@@ -45,14 +45,5 @@ internal readonly record struct SmtDigestKey(UInt128 High, UInt128 Low)
         return Convert.ToHexStringLower(bytes);
     }
 
-    /// <summary>An order of digests that follows from their bytes alone.</summary>
-    /// <param name="other">The other digest.</param>
-    /// <returns>Below, at or above zero.</returns>
-    public int CompareTo(SmtDigestKey other)
-    {
-        var high = High.CompareTo(other.High);
-        return high != 0 ? high : Low.CompareTo(other.Low);
-    }
-
     #endregion
 }

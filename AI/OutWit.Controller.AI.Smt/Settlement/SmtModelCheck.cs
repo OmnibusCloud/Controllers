@@ -1,4 +1,5 @@
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Model.Eval;
 
 namespace OutWit.Controller.AI.Smt.Settlement;
 
@@ -12,6 +13,9 @@ internal sealed record SmtModelCheck(string Class, string Reason, string Detail)
 
     /// <summary>A row with no model to check.</summary>
     public static readonly SmtModelCheck NONE = new(SmtRunWords.NOT_CHECKED, "", "");
+
+    /// <summary>Every reason a check gives: the evaluator's codes, and <see cref="SmtRunWords.OUTPUT_EXCEEDED"/> for a model that did not come whole.</summary>
+    public static readonly IReadOnlyList<string> REASONS = [.. SmtValidationReasons.All, SmtRunWords.OUTPUT_EXCEEDED];
 
     #endregion
 

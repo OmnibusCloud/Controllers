@@ -33,20 +33,11 @@ internal static class SmtRowWords
 {
     #region Constants
 
-    private static readonly HashSet<string> REFUSALS = new(SmtRefusalCodes.All, StringComparer.Ordinal)
-    {
-        SmtSolveCodes.HASH_MISMATCH, SmtSolveCodes.PROFILE_UNKNOWN, SmtSolveCodes.OPTIONS_INVALID
-    };
+    private static readonly HashSet<string> REFUSALS = new(SmtRefusalCodes.All.Concat(SmtSolveCodes.REFUSALS), StringComparer.Ordinal);
 
-    private static readonly HashSet<string> CRASHES = new(StringComparer.Ordinal)
-    {
-        SmtSolveCodes.TRAP, SmtSolveCodes.EXIT, SmtSolveCodes.ENGINE_ERROR, SmtSolveCodes.UNREADABLE_ANSWER
-    };
+    private static readonly HashSet<string> CRASHES = new(SmtSolveCodes.CRASHES, StringComparer.Ordinal);
 
-    private static readonly HashSet<string> FAULTS = new(StringComparer.Ordinal)
-    {
-        SmtSolveCodes.SANDBOX_UNAVAILABLE, SmtSolveCodes.BACKSTOP, SmtSolveCodes.CANCELLED, SmtSolveCodes.NOT_INSTANTIATED, SmtSolveCodes.HOST_FAULT
-    };
+    private static readonly HashSet<string> FAULTS = new(SmtSolveCodes.FAULTS, StringComparer.Ordinal);
 
     #endregion
 

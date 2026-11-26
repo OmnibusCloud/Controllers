@@ -189,7 +189,7 @@ internal sealed class SmtProblemSetRowBuilder
         {
             var term = SmtSanitizer.SanitizeTerm(texts[index]);
             if (!term.IsAccepted)
-                return In(term.Refusal!, $"values[{index}]");
+                return In(term.Refusal, $"values[{index}]");
 
             values.Add(term.Term.ToString());
         }
@@ -201,7 +201,7 @@ internal sealed class SmtProblemSetRowBuilder
     {
         var term = SmtSanitizer.SanitizeTerm(text);
         if (!term.IsAccepted)
-            return In(term.Refusal!, "goal");
+            return In(term.Refusal, "goal");
 
         data.Goal = term.Term.ToString();
         return null;

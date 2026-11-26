@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-capabilities.schema.json",
   "title": "Smt capabilities",
-  "description": "The capabilities blob of Smt.Capabilities: what a lab can know before a run. It takes no problem set. Nodes run the same module as the host (a node on another version refuses the work), so what is said here is the pool's. An application reads its limits here instead of carrying copies of them. Nothing in it names a machine.",
+  "description": "The capabilities blob of Smt.Capabilities: what a lab can know before a run. It takes no problem set. Nodes run the same module as the host (a node on another version refuses the work), so what is said here is the pool's. An application reads its limits and the words of the documents of a run here instead of carrying copies of them: every list of words is the controller's own list, the one the documents are written with. Nothing in it names a machine.",
   "type": "object",
-  "required": ["schema", "controller", "profile", "queries", "defaults", "ceilings", "time", "session", "problem", "problem_set", "results", "packages", "node", "benchmark_unit", "platforms"],
+  "required": ["schema", "controller", "profile", "queries", "defaults", "ceilings", "time", "session", "problem", "problem_set", "results", "run", "packages", "node", "benchmark_unit", "platforms"],
   "additionalProperties": false,
   "properties": {
     "schema": { "type": "string", "const": "smt-capabilities/1" },
@@ -42,7 +42,7 @@
         "rlimit": { "type": "integer", "minimum": 1, "description": "The solver's resource limit of one check: the profile's number." },
         "hard_cap_s": { "type": "integer", "minimum": 1, "description": "Seconds of a reference machine for one problem, turned into fuel at time.fuel_per_second." },
         "memory_mb": { "type": "integer", "minimum": 1, "description": "The solver's own memory ceiling of one problem." },
-        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "The share of the problems run on two machines." }
+        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "The share of the packages solved on two machines, rounded up to a whole package: any rate above 0 solves one package twice at least, so a set of one package is solved twice whole." }
       }
     },
     "ceilings": {
@@ -115,15 +115,48 @@
     },
     "results": {
       "type": "object",
-      "description": "The words a row may say, and the codes of a package a node could not work on at all.",
-      "required": ["statuses", "verdicts", "reasons", "proofs", "node_faults"],
+      "description": "The words a row of the results of SmtRun may say (smt-results.schema.json), each list the controller's own, and the codes of a package a node could not work on at all. A field of a row says one word of its list, or the empty word where the results schema allows it (settled_by without an answer, the code where the status says it all, validation_reason where the class says it all).",
+      "required": ["statuses", "codes", "verdicts", "reasons", "proofs", "expected", "expected_agreements", "validations", "validation_reasons", "settled_by", "node_faults"],
       "additionalProperties": false,
       "properties": {
-        "statuses": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
-        "verdicts": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
-        "reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
-        "proofs": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
-        "node_faults": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }
+        "statuses": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "status: the statuses of a row of the results. A node's fault is never one (its problem goes out again); the server's no_result and disputed are." },
+        "codes": {
+          "type": "object",
+          "description": "code, by the status of the row: the code of a refused row (the refusal codes of the problem set and the sanitizer, also the keys of the report's refused_by_code), the kind of a crash of the solver, what the nodes said last of a problem left without a result (also the keys of the integrity document's no_result_by_reason), and the outcome of a dispute that stands. Every other status has the empty code.",
+          "required": ["refused", "engine_crash", "no_result", "disputed"],
+          "additionalProperties": false,
+          "properties": {
+            "refused": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+            "engine_crash": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+            "no_result": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+            "disputed": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }
+          }
+        },
+        "verdicts": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "verdict." },
+        "reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "reason: why a check has no verdict or an enumeration is not complete." },
+        "proofs": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "proof." },
+        "expected": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "expected: the verdict the row or the problem's :status expects." },
+        "expected_agreements": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "expected_agreement (also the keys of the report's expected)." },
+        "validations": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "validation: what the server's evaluator said of the row's models and values." },
+        "validation_reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "validation_reason of a partial or a failed class (also the keys of the report's partial_by_reason): the evaluator's codes, and output_exceeded for a model that did not come whole." },
+        "settled_by": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "settled_by: how the answer was settled." },
+        "node_faults": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "The codes of a package a node could not work on at all (the keys of the integrity document's node_faults_by_code)." }
+      }
+    },
+    "run": {
+      "type": "object",
+      "description": "The words of the report and the integrity document of SmtRun beside those of a row, each list the controller's own.",
+      "required": ["sampling", "bindings", "rounds", "repair_reasons", "rejected", "dispute_causes", "dispute_outcomes", "stopped_by"],
+      "additionalProperties": false,
+      "properties": {
+        "sampling": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "sampling: whether the sampling that was asked for happened." },
+        "bindings": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "binding: whether the platform told the server which package each result came back for." },
+        "rounds": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "The round of a fan-out of the integrity document." },
+        "repair_reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "The keys of the integrity document's repairs_by_reason: the words of a problem without an answer (results.codes.no_result), and copies_short." },
+        "rejected": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "Why the server refused a result package (the keys of the integrity document's rejected)." },
+        "dispute_causes": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "Why a dispute went." },
+        "dispute_outcomes": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "How a dispute ended." },
+        "stopped_by": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "The budget that stopped a problem of the report's long tail as unknown; the empty word when none did." }
       }
     },
     "packages": {

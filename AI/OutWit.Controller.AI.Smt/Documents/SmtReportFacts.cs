@@ -25,6 +25,9 @@ internal sealed class SmtReportFacts
     /// <summary>The name the classes of the logics past <see cref="MAX_LOGICS"/> are counted under.</summary>
     public const string OTHER = "(other)";
 
+    /// <summary>The budgets that stop a problem as <c>unknown</c>, as the long tail names them; an entry no budget stopped names none.</summary>
+    public static readonly IReadOnlyList<string> BUDGETS = [SmtResultWords.RLIMIT, SmtResultWords.FUEL, SmtResultWords.MEMOUT];
+
     #endregion
 
     #region Functions
@@ -110,7 +113,7 @@ internal sealed class SmtReportFacts
 
     private static string StoppedBy(SmtResultData row)
     {
-        return row.Verdict == SmtResultWords.UNKNOWN && row.Reason is SmtResultWords.RLIMIT or SmtResultWords.FUEL or SmtResultWords.MEMOUT ? row.Reason : "";
+        return row.Verdict == SmtResultWords.UNKNOWN && BUDGETS.Contains(row.Reason) ? row.Reason : "";
     }
 
     private void CountClass(string logic, string validation)

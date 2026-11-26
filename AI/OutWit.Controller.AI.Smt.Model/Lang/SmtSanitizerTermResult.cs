@@ -13,6 +13,7 @@ public sealed class SmtSanitizerTermResult
     internal SmtSanitizerTermResult(SmtExpression term)
     {
         Term = term;
+        IsAccepted = true;
     }
 
     internal SmtSanitizerTermResult(SmtRefusalData refusal)
@@ -30,9 +31,10 @@ public sealed class SmtSanitizerTermResult
     /// <summary>Why the text was refused; null when it was taken.</summary>
     public SmtRefusalData? Refusal { get; }
 
-    /// <summary>Whether the text was taken.</summary>
+    /// <summary>Whether the text was taken: then the term is there, else the refusal (the constructors make it so).</summary>
     [MemberNotNullWhen(true, nameof(Term))]
-    public bool IsAccepted => Term != null;
+    [MemberNotNullWhen(false, nameof(Refusal))]
+    public bool IsAccepted { get; }
 
     #endregion
 }

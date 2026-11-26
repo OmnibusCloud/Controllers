@@ -6,9 +6,9 @@
       Copies the package's content/module/* into the consumer's
       $(OutputPath)@Controllers\smt.module\ so the controller runtime can
       find the controller DLL, the Smt.Model DLL and the manifest, then resolves
-      the module's Tier-2 data assets (the native wasmtime library per platform)
-      from the manifest into the same folder, the way Verify's and Corpus's
-      targets do.
+      the module's Tier-2 data assets (the native wasmtime library of each
+      platform and the solver module) from the manifest into the same folder,
+      the way Verify's and Corpus's targets do.
   -->
 
   <PropertyGroup>

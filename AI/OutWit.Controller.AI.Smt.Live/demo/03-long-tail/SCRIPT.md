@@ -6,7 +6,7 @@ authors gave it in its `:status` (1,068 `sat`, 892 `unsat`), each of which took 
 seconds at a past SMT competition. The problems of `01-known-answers` are decided in milliseconds;
 these take seconds to minutes each, so the work is the long tail, and what a run shows is how a
 fleet shares it out: every verdict agrees with the known one or is an unknown at a budget's end,
-every `sat` model is checked by the server's evaluator, a share of the problems runs on two
+every `sat` model is checked by the server's evaluator, a share of the packages is solved on two
 machines and their answers are compared, and the report's long tail lists every problem by the
 fuel it took.
 

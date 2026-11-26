@@ -18,11 +18,11 @@ application that prepares a run, the host that splits it, the node that solves i
 | Type | Role |
 |---|---|
 | `SmtReader` | reads SMT-LIB 2.6 text into s-expressions: a script, a term, a model a solver printed |
-| `SmtExpression` | one s-expression: a list, or an atom with its text; written back, it is one line of single-spaced tokens that reads as the same s-expression |
+| `SmtExpression` | one s-expression: a list, or an atom with its text; written back, it is one line of single-spaced tokens that reads as the same s-expression (an atom a program makes is refused unless its text is one token of its kind; a string keeps any content) |
 | `SmtExpressionKind` | list, symbol, keyword, numeral, decimal, hexadecimal, binary, string |
 | `SmtReaderLimits` | how much the reader takes before it refuses: characters, tokens, nesting, digits of a number, bits of a literal, characters of a string; `SmtReaderLimits.Problem` holds the ceilings of a submitted problem |
 | `SmtSyntaxException` / `SmtSyntaxFault` | a refusal: what is wrong, the line and the column, a sentence without the text itself |
-| `SmtReservedWords` | the reserved words of the standard: the general ones and the command names |
+| `SmtReservedWords` | the reserved words of the standard: the general ones and the command names, as sets no caller can change |
 | `SmtLexicon` | the character classes the reader and the writer share: blanks, delimiters, the characters of a simple symbol |
 
 ```csharp
@@ -78,8 +78,8 @@ same problem, with the same hash, everywhere.
 |---|---|
 | `SmtSanitizer` | `Sanitize(text)` for a problem, `SanitizeTerm(text)` for a term that stands beside one (a goal to prove, a term whose value is asked, a constant to project on) |
 | `SmtProblem` | the problem as taken: its commands, its two texts and its hash, the logic, the expected verdict, the attribution, the declared constants and functions, what was stripped |
-| `SmtRefusalData` | a refusal: the line, the command, a fixed code, a reason. It never carries the text: at most one token of it, cut to 64 characters |
-| `SmtRefusalCodes` | the codes of a refusal |
+| `SmtRefusalData` | a refusal: the line, the command, a fixed code, a reason. It never carries the text: at most one token of it, cut to 64 characters, on one line (a blank in place of every control character, line or paragraph separator, format character such as a direction override, and half of a surrogate pair that stands alone) |
+| `SmtRefusalCodes` | the codes of a refusal; `All` is a set no caller can change |
 | `SmtScripts` | the commands the controller itself puts around a problem |
 
 ```csharp
@@ -196,7 +196,7 @@ host when a run is split, and wherever a preflight counts what a set holds.
 | `SmtProblemSetSummary` | what was read, counted: rows taken and refused, the taken problems by logic, by query and by expected verdict, the stripped commands, the refusals by code and the first 1,000 of them in full, the licences |
 | `SmtProblemSetLimits` | the numbers below |
 | `SmtProjection` | the check of an enumeration's `project`, made by the reader of a set and made again by a node of what travelled to it: `Take(problem, names, out constants)` gives the constants as the problem declares them, or the refusal |
-| `SmtOptionsData`, `SmtOptionsRules` | the options of a run; their defaults and ceilings, `Check` and `Resolve` |
+| `SmtOptionsData`, `SmtOptionsRules` | the options of a run; their defaults and ceilings, `Check`, `Readable` (each option out of range at the value that means its default, from the same ranges as `Check`) and `Resolve` |
 | `SmtQuery` | `Check`, `Enumerate`, `Prove` |
 
 ```csharp
@@ -314,12 +314,18 @@ element.
 | `ResourceLimit` | `rlimit` | the profile's | 4,294,967,295 | the solver's own counter of work for one check |
 | `HardCapSeconds` | `hard_cap_s` | 60 | 600 | seconds of a reference machine for one problem; the controller turns them into a budget of the solver's work that is the same on every node |
 | `MemoryMegabytes` | `memory_mb` | 1,024 | 4,096 | the most memory of one problem |
-| `SamplingRate` | `sampling_rate` | 0.05 | 1 | the share of the problems that are run on two machines; 0 turns re-execution off, 1 runs every problem twice |
+| `SamplingRate` | `sampling_rate` | 0.05 | 1 | the share of the packages that are solved on two machines; 0 turns re-execution off, 1 solves every package twice |
 
 A number that is 0 and a text that is empty mean "not set: the default". The sampling rate is the
-exception, since 0 is a rate of its own: a new `SmtOptionsData` holds its default.
+exception, since 0 is a rate of its own: a new `SmtOptionsData` holds its default. A run samples
+packages, not problems, and rounds the share up to a whole package: any rate above 0 solves one
+package twice at least, so a small set has more of its problems twice than the rate says, and a
+set of one package (up to a package's size) is solved twice whole, wherever the pool has two
+machines.
 `SmtOptionsRules.Check` gives one sentence for each option that is out of its range, naming it as
-a run's specification does; `SmtOptionsRules.Resolve` gives a copy with the defaults of this
+a run's specification does; `SmtOptionsRules.Readable` gives the options with each one out of
+range at the value that means its default, from the same ranges (a preflight reads a set
+whatever its options say); `SmtOptionsRules.Resolve` gives a copy with the defaults of this
 package filled in (the profile and the resource limit stay as they are: their defaults are the
 controller's and the profile's). A reader takes options that are in range, and refuses to be
 made with others.
@@ -557,7 +563,7 @@ These are the types of both ends; the package format of the blobs is the control
 |---|---|
 | `SmtTaskPackageData` | what a node is handed: the blob of the problems (`ProblemsBlobId`, `Sha256`, `SizeBytes`), how many (`ProblemCount`), the package's `Ticket`, the controller version the job runs on (`RequiredControllerVersion`), the digest of the problems' indices (`IndexDigest`), the run's `Options`, resolved |
 | `SmtResultPackageData` | what a node returns: the blob of the rows (`ResultsBlobId`, `Sha256`, `SizeBytes`), how many (`ResultCount`), the ticket it answers, and a `FaultCode` with its `FaultMessage` when the node could not work on the package at all |
-| `SmtResultData` | one problem's row: the problem (`Index`, `Id`, the `Hash` of the text the node was given), the `Ticket`, how its session ended and what it came to, every model and value as the solver printed it, what it cost, the `ControllerVersion`, the `Platform`, the `WallMs`, and its `Digest` |
+| `SmtResultData` | one problem's row: the problem (`Index`, `Id`, the `Hash` of the text the node was given), the `Ticket`, how its session ended and what it came to, every model and value as the solver printed it, what it cost, the `ControllerVersion`, the `Platform`, the `WallMs` (0: the controller's node does not write the session's wall time), and its `Digest` |
 | `SmtResultDigest` | the canonical form of a row and its SHA-256: `Of(row)`, `Holds(row)`, `Canonical(row)` |
 | `SmtResultWords` | the words of a row: statuses, verdicts, reasons, proofs |
 | `SmtNodeFaults` | the codes of a package a node could not work on |
@@ -567,6 +573,16 @@ The ticket is 16 random bytes as 32 lower-case hex characters, made with the pac
 back in the result package and in every row, and is never written to a document. The index
 digest is the SHA-256 over the indices of the package's problems in ascending order, each as four
 bytes, low byte first.
+
+The wire types are MemoryPack types in its default mode, each member at a fixed order. A reader
+takes a payload of fewer members than it knows (a member its sender did not have arrives as its
+type's default: null for a text or a list, never the property's initializer) and throws on a
+payload of more. So no change of a published layout is compatible on its own, appending a member
+included: a layout changes only behind a version fence, a new controller and Model version whose
+payloads no reader of the old layout is ever handed (an application reads the payloads of the
+server whose Model version it is built against). A member a sender may not have starts at its
+type's default, and a reference one is declared nullable. The tests hold every layout to a
+committed baseline, member by member.
 
 ### The row of a problem
 

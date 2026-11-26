@@ -26,4 +26,9 @@ Job:SmtRun(Blob:problems, SmtOptions:opts)
     Blob:report = Smt.Collect(ledger);
     Blob:provenance = Smt.Provenance(ledger);
     Blob:integrity = Smt.Integrity(ledger);
+
+    ~ The submitter of a finished job can read its variables. What the fan-outs returned is held there in the order the platform kept it, one node's results after another's, with the ticket of each package and the id of each result's blob: what the documents hold back. Once the documents are written it is emptied. ~
+    solved = Smt.Forget(solved);
+    repaired = Smt.Forget(repaired);
+    settled = Smt.Forget(settled);
 }

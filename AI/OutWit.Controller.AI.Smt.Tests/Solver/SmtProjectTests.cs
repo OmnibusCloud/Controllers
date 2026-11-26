@@ -109,7 +109,7 @@ public sealed class SmtProjectTests
                 "and the manifest says so, with Grid from the version that tells a fan-out's return collection which package each result was returned for");
             Assert.That(registered, Is.EqualTo(new[]
             {
-                "WitActivityAdapterSmtCapabilities", "WitActivityAdapterSmtCollect", "WitActivityAdapterSmtCollectResults", "WitActivityAdapterSmtDisputes",
+                "WitActivityAdapterSmtCapabilities", "WitActivityAdapterSmtCollect", "WitActivityAdapterSmtCollectResults", "WitActivityAdapterSmtDisputes", "WitActivityAdapterSmtForget",
                 "WitActivityAdapterSmtIntegrity", "WitActivityAdapterSmtPreflight", "WitActivityAdapterSmtProvenance", "WitActivityAdapterSmtRepairs",
                 "WitActivityAdapterSmtRuntimeDiagnostics", "WitActivityAdapterSmtSamplingRate", "WitActivityAdapterSmtSettle", "WitActivityAdapterSmtSolvePackage",
                 "WitActivityAdapterSmtSplit",
@@ -126,7 +126,7 @@ public sealed class SmtProjectTests
             .ToList();
         Assert.That(activities, Is.EqualTo(new[]
         {
-            "Smt.Capabilities", "Smt.Collect", "Smt.CollectResults", "Smt.Disputes", "Smt.Integrity", "Smt.Preflight", "Smt.Provenance", "Smt.Repairs",
+            "Smt.Capabilities", "Smt.Collect", "Smt.CollectResults", "Smt.Disputes", "Smt.Forget", "Smt.Integrity", "Smt.Preflight", "Smt.Provenance", "Smt.Repairs",
             "Smt.RuntimeDiagnostics", "Smt.SamplingRate", "Smt.Settle", "Smt.SolvePackage", "Smt.Split"
         }));
     }
