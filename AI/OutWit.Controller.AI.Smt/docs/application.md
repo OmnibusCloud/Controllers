@@ -231,6 +231,60 @@ reading (it is a MemoryPack object of the model package, not a JSON document):
 
 <!-- example: preflight -->
 ```json
+{
+  "Runnable": true,
+  "Rows": 5,
+  "Accepted": 4,
+  "Refused": 1,
+  "BytesRead": 598,
+  "Sha256": "e23af6fc683f87cf7b873646c56f6040d3b2a2ab4e106bef6c1ef63a7908336f",
+  "RefusalCodes": [
+    {"Name": "command_not_allowed", "Count": 1}
+  ],
+  "Refusals": [
+    {
+      "File": "push",
+      "Line": 1,
+      "Command": "push",
+      "Code": "command_not_allowed",
+      "Reason": "incremental scripts, unsat cores and proofs are not supported",
+      "Row": 6
+    }
+  ],
+  "Logics": [
+    {"Name": "QF_LIA", "Count": 4}
+  ],
+  "OtherLogics": 0,
+  "Queries": [
+    {"Name": "check", "Count": 2},
+    {"Name": "enumerate", "Count": 1},
+    {"Name": "prove", "Count": 1}
+  ],
+  "Expected": [
+    {"Name": "none", "Count": 2},
+    {"Name": "sat", "Count": 1},
+    {"Name": "unsat", "Count": 1}
+  ],
+  "Stripped": [],
+  "Licenses": [
+    {"Name": "", "Count": 4}
+  ],
+  "OtherLicenses": 0,
+  "OptionProblems": [],
+  "Profile": "z3-5.4.1",
+  "ResourceLimit": 150000000,
+  "HardCapSeconds": 60,
+  "Fuel": 300000000000,
+  "MemoryMegabytes": 1024,
+  "MaxModels": 2,
+  "Seed": 0,
+  "SamplingRate": 1,
+  "SessionMemoryBytes": 2885681152,
+  "UpperBoundSeconds": 240,
+  "Packages": 1,
+  "ProblemsPerPackage": 16,
+  "Messages": ["The upper bound is the taken problems times the hard cap, in seconds of the reference machine: a bound, not an estimate. How long an SMT problem takes cannot be told from its text."]
+}
 ```
 
 </details>
@@ -269,6 +323,107 @@ version, without a pool:
 
 <!-- example: capabilities -->
 ```json
+{
+  "schema": "smt-capabilities/1",
+  "controller": "0.5.0",
+  "profile": {
+    "id": "z3-5.4.1",
+    "solver": "z3",
+    "solver_version": "5.4.1",
+    "module": "wasm/z3-5.4.1.wasm",
+    "module_sha256": "9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364",
+    "module_size": 30204160,
+    "module_present": true,
+    "engine": "wasmtime 48.0.8"
+  },
+  "queries": ["check", "enumerate", "prove"],
+  "defaults": {
+    "max_models": 2,
+    "seed": 0,
+    "rlimit": 150000000,
+    "hard_cap_s": 60,
+    "memory_mb": 1024,
+    "sampling_rate": 0.05
+  },
+  "ceilings": {
+    "max_models": 1000,
+    "seed": 2147483647,
+    "rlimit": 4294967295,
+    "hard_cap_s": 600,
+    "memory_mb": 4096,
+    "sampling_rate": 1
+  },
+  "time": {"fuel_per_second": 5000000000, "backstop_base_ms": 60000, "backstop_slowdown": 10},
+  "session": {
+    "output_bytes": 16777216,
+    "transcript_bytes": 8192,
+    "message_characters": 1024,
+    "memory_headroom_bytes": 16777216
+  },
+  "problem": {
+    "max_characters": 4194304,
+    "max_tokens": 2000000,
+    "max_depth": 100000,
+    "max_numeral_digits": 4096,
+    "max_literal_bits": 65536,
+    "max_string_characters": 65536,
+    "max_declared_symbols": 100000,
+    "max_index": 65536,
+    "max_term_characters": 65536
+  },
+  "problem_set": {
+    "max_line_bytes": 16777216,
+    "max_rows": 1000000,
+    "max_id_characters": 64,
+    "max_values": 256,
+    "max_project": 256,
+    "max_tags_characters": 256
+  },
+  "results": {
+    "statuses": ["ok", "refused", "input_error", "output_exceeded", "engine_crash", "no_result", "disputed"],
+    "codes": {
+      "refused": ["ambiguous_token", "builtin_name", "command_after_end", "command_malformed", "command_not_allowed", "field_invalid", "field_missing", "field_not_allowed", "id_duplicate", "id_invalid", "index_too_large", "literal_too_wide", "nesting_too_deep", "non_ascii_string", "not_a_command", "not_a_term", "numeral_too_long", "reserved_prefix", "reserved_symbol", "row_malformed", "row_too_long", "set_too_large", "string_too_long", "syntax_error", "text_too_long", "too_many_problems", "too_many_symbols", "too_many_tokens", "unknown_constant"],
+      "engine_crash": ["trap", "exit", "engine_error", "unreadable_answer"],
+      "no_result": ["node_refused", "sandbox_unavailable", "backstop", "cancelled", "not_instantiated", "host_fault", "version_mismatch", "package_invalid", "ticket_invalid", "package_too_large", "package_hash_mismatch", "package_unreadable", "package_mismatch", "memory_insufficient", "download_failed", "upload_failed", "unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package", "no_answer"],
+      "disputed": ["resolved", "no_majority", "too_few_copies", "surplus_copies"]
+    },
+    "verdicts": ["sat", "unsat", "unknown", "none"],
+    "reasons": ["rlimit", "fuel", "memout", "incomplete", "other", "none"],
+    "proofs": ["proved", "counterexample", "none"],
+    "expected": ["sat", "unsat", "none"],
+    "expected_agreements": ["agree", "disagree", "n/a"],
+    "validations": ["validated", "partial", "failed", "none"],
+    "validation_reasons": ["assertion_false", "value_mismatch", "completed_symbol", "quantifier", "algebraic_number", "division_by_zero", "regular_expression", "floating_point", "selector_of_other_constructor", "unsupported_operator", "unsupported_sort", "array_comparison", "string_literal", "ill_formed_term", "unknown_symbol", "ill_formed_command", "ambiguous_symbol", "unreadable_model", "unreadable_values", "budget_steps", "budget_depth", "budget_size", "evaluator_error", "output_exceeded", "budget_package"],
+    "settled_by": ["one_copy", "copies", "dispute", "agreement"],
+    "node_faults": ["version_mismatch", "package_invalid", "ticket_invalid", "package_too_large", "package_hash_mismatch", "package_unreadable", "package_mismatch", "sandbox_unavailable", "memory_insufficient", "download_failed", "upload_failed"]
+  },
+  "run": {
+    "sampling": ["not_stated", "none", "as_asked", "short"],
+    "bindings": ["bound", "unbound", "mixed", "none"],
+    "rounds": ["main", "repair", "dispute"],
+    "repair_reasons": ["node_refused", "sandbox_unavailable", "backstop", "cancelled", "not_instantiated", "host_fault", "version_mismatch", "package_invalid", "ticket_invalid", "package_too_large", "package_hash_mismatch", "package_unreadable", "package_mismatch", "memory_insufficient", "download_failed", "upload_failed", "unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package", "no_answer", "copies_short"],
+    "rejected": ["unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package"],
+    "dispute_causes": ["digests_differ", "model_failed", "surplus"],
+    "dispute_outcomes": ["resolved", "no_majority", "too_few_copies", "surplus_copies"],
+    "stopped_by": ["rlimit", "fuel", "memout"]
+  },
+  "packages": {
+    "max_problems": 256,
+    "max_bytes": 269484032,
+    "max_problem_frame_bytes": 134217728,
+    "max_result_frame_bytes": 50397184
+  },
+  "node": {
+    "min_ram_mb": 7680,
+    "max_degree": 16,
+    "ram_headroom": 0.75,
+    "session_margin_bytes": 201326592,
+    "session_bytes": 2885681152,
+    "priority": "below_normal"
+  },
+  "benchmark_unit": "smt-problem@ref-v1",
+  "platforms": ["win-x64", "linux-x64", "osx-arm64"]
+}
 ```
 
 </details>
@@ -495,6 +650,11 @@ defaults, on three machines:
 
 <!-- example: results -->
 ```json
+{"index":0,"id":"half","query":"check","logic":"QF_LIA","status":"ok","code":"","message":"","verdict":"sat","reason":"none","expected":"sat","expected_agreement":"agree","values":"((x 5)\n ((\u002B x 1) 6))\n","model":"(\n  (define-fun x () Int\n    5)\n)\n","model_truncated":false,"validation":"validated","validation_reason":"","copies":2,"agreed":true,"settled_by":"copies","digest":"efce84caf173afda9258154675780b8d2783eece45187ce5cf766c7c9d019fb4","stats":{"resource_count":42,"fuel":21676065,"checks":1}}
+{"index":1,"id":"odd","query":"check","logic":"QF_LIA","status":"ok","code":"","message":"","verdict":"unsat","reason":"none","expected":"unsat","expected_agreement":"agree","values":null,"model":null,"model_truncated":false,"validation":"none","validation_reason":"","copies":2,"agreed":true,"settled_by":"copies","digest":"ec2b09f8b5fff3e2467b3e1298170d325f446c6163683452d063587cd525066c","stats":{"resource_count":10,"fuel":21006093,"checks":1}}
+{"index":2,"id":"pairs","query":"enumerate","logic":"QF_LIA","status":"ok","code":"","message":"","verdict":"sat","reason":"none","expected":"none","expected_agreement":"n/a","count":3,"complete":true,"limit_reached":false,"models":[{"values":"((a 1)\n (b 2))\n","model":"(\n  (define-fun b () Int\n    2)\n  (define-fun a () Int\n    1)\n)\n"},{"values":"((a 2)\n (b 3))\n","model":"(\n  (define-fun b () Int\n    3)\n  (define-fun a () Int\n    2)\n)\n"},{"values":"((a 1)\n (b 3))\n","model":"(\n  (define-fun b () Int\n    3)\n  (define-fun a () Int\n    1)\n)\n"}],"model_truncated":false,"validation":"validated","validation_reason":"","copies":2,"agreed":true,"settled_by":"copies","digest":"f9ee81c7ce16cc0c914813bf23afa609ba25fffa310110df7124177a780fa3e5","stats":{"resource_count":871,"fuel":29315376,"checks":4}}
+{"index":3,"id":"double","query":"prove","logic":"QF_LIA","status":"ok","code":"","message":"","verdict":"unsat","reason":"none","expected":"none","expected_agreement":"n/a","proof":"proved","model":null,"model_truncated":false,"validation":"none","validation_reason":"","copies":2,"agreed":true,"settled_by":"copies","digest":"b2e70fd7d23dfabbbe5d1d7ac44459e6029b227ea54495578ec387de4b78c8e5","stats":{"resource_count":169,"fuel":24100421,"checks":1}}
+{"index":4,"id":"push","status":"refused","code":"command_not_allowed","message":"incremental scripts, unsat cores and proofs are not supported","line":1,"verdict":"none","reason":"none","expected":"none","expected_agreement":"n/a","validation":"none","validation_reason":"","copies":0,"agreed":false,"settled_by":"","model_truncated":false}
 ```
 
 </details>
@@ -503,6 +663,96 @@ defaults, on three machines:
 
 <!-- example: report -->
 ```json
+{
+  "schema": "smt-report/1",
+  "run": {
+    "profile": "z3-5.4.1",
+    "module_sha256": "9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364",
+    "controller": "0.5.0",
+    "sampling_rate": 1,
+    "sampling": "as_asked",
+    "unanswered_packages": 0,
+    "binding": "bound",
+    "options": {
+      "profile": "z3-5.4.1",
+      "query": "check",
+      "max_models": 2,
+      "seed": 0,
+      "rlimit": 150000000,
+      "hard_cap_s": 60,
+      "fuel": 300000000000,
+      "memory_mb": 1024,
+      "sampling_rate": 1
+    }
+  },
+  "problem_set": {
+    "rows": 5,
+    "accepted": 4,
+    "refused": 1,
+    "refused_by_code": {"command_not_allowed": 1},
+    "logics": {"QF_LIA": 4},
+    "other_logics": 0,
+    "queries": {"check": 2, "enumerate": 1, "prove": 1},
+    "expected": {"none": 2, "sat": 1, "unsat": 1}
+  },
+  "statuses": {
+    "ok": 4,
+    "refused": 1,
+    "input_error": 0,
+    "output_exceeded": 0,
+    "engine_crash": 0,
+    "no_result": 0,
+    "disputed": 0
+  },
+  "verdicts": {"sat": 2, "unsat": 2, "unknown": 0},
+  "unknown": {"rlimit": 0, "fuel": 0, "memout": 0, "incomplete": 0, "other": 0},
+  "expected": {"agree": 2, "disagree": 0, "n/a": 3},
+  "validation": {
+    "classes": {"validated": 2, "partial": 0, "failed": 0},
+    "by_logic": {
+      "QF_LIA": {"validated": 2, "partial": 0, "failed": 0}
+    },
+    "partial_by_reason": {}
+  },
+  "copies": {
+    "two_or_more": 4,
+    "agreed": 4,
+    "disputed": 0,
+    "disputes": {"resolved": 0, "no_majority": 0, "too_few_copies": 0, "surplus_copies": 0},
+    "settled_by": {"one_copy": 0, "copies": 4, "dispute": 0, "agreement": 0}
+  },
+  "unsat_one_copy": {
+    "count": 0,
+    "indices": []
+  },
+  "complete_one_copy": {
+    "count": 0,
+    "indices": []
+  },
+  "long_tail": {
+    "rlimit": 150000000,
+    "fuel": 300000000000,
+    "problems": [
+      {"index": 2, "resource_count": 871, "fuel": 29315376, "stopped_by": ""},
+      {"index": 3, "resource_count": 169, "fuel": 24100421, "stopped_by": ""},
+      {"index": 0, "resource_count": 42, "fuel": 21676065, "stopped_by": ""},
+      {"index": 1, "resource_count": 10, "fuel": 21006093, "stopped_by": ""}
+    ]
+  },
+  "attribution": {
+    "sources": [],
+    "other_problems": 0
+  },
+  "enumerate": {
+    "exactly_one": 0,
+    "two_or_more": 1,
+    "no_model": 0,
+    "undecided": 0,
+    "kept": [],
+    "kept_one_copy": [],
+    "dropped": [2]
+  }
+}
 ```
 
 </details>
@@ -511,6 +761,92 @@ defaults, on three machines:
 
 <!-- example: integrity -->
 ```json
+{
+  "schema": "smt-integrity/1",
+  "summary": {
+    "problems": 4,
+    "copies_made": 8,
+    "compared": 4,
+    "agreements": 4,
+    "disagreements": 0,
+    "one_copy": 0,
+    "unsat_one_copy": 0,
+    "complete_one_copy": 0,
+    "disputes": 0,
+    "disputes_resolved": 0,
+    "disputed": 0,
+    "dispute_causes": {"digests_differ": 0, "model_failed": 0, "surplus": 0},
+    "dispute_outcomes": {"resolved": 0, "no_majority": 0, "too_few_copies": 0, "surplus_copies": 0},
+    "lies": 0,
+    "problems_with_lies": 0,
+    "failed_models": 0,
+    "evaluator_solver_disagreements": 0,
+    "repairs": 0,
+    "repairs_by_reason": {},
+    "no_result": 0,
+    "no_result_by_reason": {},
+    "rejected_results": 0,
+    "rejected": {
+      "unknown_ticket": 0,
+      "duplicate": 0,
+      "unreadable": 0,
+      "content": 0,
+      "surplus": 0,
+      "other_package": 0
+    },
+    "node_faults": 0,
+    "node_faults_by_code": {
+      "version_mismatch": 0,
+      "package_invalid": 0,
+      "ticket_invalid": 0,
+      "package_too_large": 0,
+      "package_hash_mismatch": 0,
+      "package_unreadable": 0,
+      "package_mismatch": 0,
+      "sandbox_unavailable": 0,
+      "memory_insufficient": 0,
+      "download_failed": 0,
+      "upload_failed": 0
+    },
+    "sampling_rate": 1,
+    "sampling": "as_asked",
+    "unanswered_packages": 0,
+    "binding": "bound",
+    "results_bound": 2,
+    "results_unbound": 0
+  },
+  "evaluator_solver_disagreements": [],
+  "fan_outs": [
+    {
+      "round": "main",
+      "packages": 1,
+      "problems": 4,
+      "copies": 2,
+      "selected": 1,
+      "complete": 1,
+      "unanswered": 0
+    },
+    {
+      "round": "repair",
+      "packages": 0,
+      "problems": 0,
+      "copies": 2,
+      "selected": 0,
+      "complete": 0,
+      "unanswered": 0
+    },
+    {
+      "round": "dispute",
+      "packages": 0,
+      "problems": 0,
+      "copies": 3,
+      "selected": 0,
+      "complete": 0,
+      "unanswered": 0
+    }
+  ],
+  "disputes": []
+}
 ```
 
 </details>
