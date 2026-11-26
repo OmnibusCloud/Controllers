@@ -18,7 +18,7 @@ internal static class SmtModelWireLayout
 {
     #region Constants
 
-    private const string COMMENT = "The wire layout of OutWit.Controller.AI.Smt.Model: the Model package version and, for every MemoryPack type, its members in wire order with name, type and the value a new instance holds. Once a version of the package is published, a member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Update this file in the same commit as the type (SmtModelWireLayoutTests prints the current layout when it differs).";
+    private const string COMMENT = "The wire layout of OutWit.Controller.AI.Smt.Model: the Model package version and, for every MemoryPack type, its members in wire order with name, type and the value a new instance holds. Once a version of the package is published, its layouts change only behind a version fence (a new controller and Model version, whose payloads no reader of the old layout is ever handed): MemoryPack throws on a payload of more members than its reader knows, so appending a member is no compatible change on its own, and a member a sender may not have arrives as its type's default (null for a text or a list), never as its initializer. A member that is added, or changes its name, its type, its place or its default, is a wire change for a deployed fleet and for every application built against the package. Update this file in the same commit as the type (SmtModelWireLayoutTests prints the current layout when it differs).";
 
     #endregion
 

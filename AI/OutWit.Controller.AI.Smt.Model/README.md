@@ -568,6 +568,16 @@ back in the result package and in every row, and is never written to a document.
 digest is the SHA-256 over the indices of the package's problems in ascending order, each as four
 bytes, low byte first.
 
+The wire types are MemoryPack types in its default mode, each member at a fixed order. A reader
+takes a payload of fewer members than it knows (a member its sender did not have arrives as its
+type's default: null for a text or a list, never the property's initializer) and throws on a
+payload of more. So no change of a published layout is compatible on its own, appending a member
+included: a layout changes only behind a version fence, a new controller and Model version whose
+payloads no reader of the old layout is ever handed (an application reads the payloads of the
+server whose Model version it is built against). A member a sender may not have starts at its
+type's default, and a reference one is declared nullable. The tests hold every layout to a
+committed baseline, member by member.
+
 ### The row of a problem
 
 | Field | |

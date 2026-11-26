@@ -27,7 +27,11 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// </para>
 /// </summary>
 [MemoryPackable]
-// Explicit MemoryPackOrder pins the wire layout to the declaration order: append new members at the END only.
+// Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
+// changes only behind a version fence, so that no reader of the old layout is ever handed the
+// new one: MemoryPack throws on a payload of more members than its reader knows, and a member a
+// sender may not have arrives as its type's default (null for a text or a list), never as its
+// initializer; such a member starts at that default, and a reference one is declared nullable.
 public sealed partial class SmtResultData : ModelBase
 {
     #region Model Base
