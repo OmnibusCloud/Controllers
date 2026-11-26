@@ -1,4 +1,3 @@
-using System.Text.Json;
 using OutWit.Cloud.Documents;
 using OutWit.Controller.AI.Smt.Live.Tests.Mock;
 using OutWit.Controller.AI.Smt.Model;
@@ -10,10 +9,9 @@ namespace OutWit.Controller.AI.Smt.Live.Tests.Docs;
 /// held to the code that takes them. The call through the SDK is compiled code
 /// (<see cref="SmtApplicationExample"/>): the page's example is its body. The request document is
 /// read by the platform's own reader of a request (<c>JobRequestParser</c>, what the server's door
-/// runs), with the door's rule for a document type: a type no installed controller publishes is
-/// refused. It reads as SmtRun with the set's blob and null options, which the controller's tests
-/// run through the engine as the defaults; and the options as a document are refused, since the
-/// model package publishes no document type.
+/// runs), with the door's rules for a document (<see cref="SmtLiveDocumentDoor"/>): it reads as
+/// SmtRun with the set's blob and the options of the call, as a document of their type. What else
+/// a document may carry, and what the door refuses, is <see cref="SmtDocumentVocabularyTests"/>.
 /// </summary>
 [TestFixture]
 public sealed class SmtApplicationPageTests
@@ -23,9 +21,6 @@ public sealed class SmtApplicationPageTests
     private const string PAGE = "AI/OutWit.Controller.AI.Smt/docs/application.md";
     private const string EXAMPLE = "AI/OutWit.Controller.AI.Smt.Live/Tests/Docs/SmtApplicationExample.cs";
     private const string SCRIPT = "AI/OutWit.Controller.AI.Smt/Scripts/SmtRun.wit";
-
-    /// <summary>The attribute a controller publishes a document type with, matched by its full name as the server's door matches it.</summary>
-    private const string CONTRACT = "OutWit.Cloud.Documents.JobDocumentContractAttribute";
 
     private const string FENCE = "```";
 
@@ -59,9 +54,9 @@ public sealed class SmtApplicationPageTests
     #region Request Tests
 
     [Test]
-    public void TheRequestOfThePageIsSmtRunWithTheSetAndNoOptionsTest()
+    public void TheRequestOfThePageIsTheRunOfTheCallTest()
     {
-        var submission = JobRequestParser.Parse(string.Join("\n", Block("request")), Door);
+        var submission = JobRequestParser.Parse(string.Join("\n", Block("request")), SmtLiveDocumentDoor.Resolve);
         var values = submission.Parameters!.GetValues();
 
         Assert.Multiple(() =>
@@ -70,47 +65,15 @@ public sealed class SmtApplicationPageTests
             Assert.That(submission.ScriptName, Is.EqualTo("SmtRun"));
             Assert.That(values, Has.Length.EqualTo(2));
             Assert.That(values[0], Is.TypeOf<Guid>(), "the set is the blob's id");
-            Assert.That(values[1], Is.Null, "the options are null: the defaults");
-        });
-    }
-
-    [Test]
-    public void TheOptionsCannotTravelAsADocumentTest()
-    {
-        var options = JsonSerializer.Serialize(new { maxModels = 5 });
-        var request = $"{{\"schemaVersion\": 1, \"script\": \"SmtRun\", \"parameters\": [{{\"kind\": \"uuid\", \"value\": \"{Guid.NewGuid()}\"}}, {{\"kind\": \"document\", \"type\": \"smt.options@1\", \"value\": {options}}}]}}";
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(Published(), Is.Empty, "the model package publishes no document type");
-            Assert.That(() => JobRequestParser.Validate(request), Throws.Nothing, "the request is well formed: a native client forwards it");
-            Assert.That(() => JobRequestParser.Parse(request, Door), Throws.TypeOf<JobRequestFormatException>().With.Message.Contains("is not published by any installed controller"),
-                "and the server's door refuses the options as a document");
+            Assert.That(values[1], Is.TypeOf<SmtOptionsData>(), "the options are a document of their type");
+            Assert.That(Block("sdk"), Does.Contain("var options = new SmtOptionsData { HardCapSeconds = 30, SamplingRate = 0.25 };"), "the options of the call");
+            Assert.That((values[1] as SmtOptionsData)?.Is(new SmtOptionsData { HardCapSeconds = 30, SamplingRate = 0.25 }), Is.True, "and the request's are the same");
         });
     }
 
     #endregion
 
     #region Tools
-
-    /// <summary>The server's door for a document type: the vocabulary is the published types of the installed controllers' model packages; any other is refused.</summary>
-    private static object Door(string typeId, JsonElement value)
-    {
-        if (!Published().Contains(typeId))
-            throw new JobRequestFormatException($"Document type '{typeId}' is not published by any installed controller.");
-
-        throw new AssertionException($"'{typeId}' is published, and this test does not materialize it");
-    }
-
-    /// <summary>The document types the model package publishes, by the attribute's full name.</summary>
-    private static HashSet<string> Published()
-    {
-        return typeof(SmtOptionsData).Assembly.GetTypes()
-            .SelectMany(type => type.GetCustomAttributesData())
-            .Where(attribute => attribute.AttributeType.FullName == CONTRACT)
-            .Select(attribute => (string)attribute.ConstructorArguments[0].Value!)
-            .ToHashSet(StringComparer.Ordinal);
-    }
 
     /// <summary>The lines of the page's block after an example's marker.</summary>
     private static List<string> Block(string name)

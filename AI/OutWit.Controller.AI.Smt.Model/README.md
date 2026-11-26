@@ -657,3 +657,29 @@ with the same vocabulary the controller writes them in.
 A preflight is `Runnable` when its options are in range, its profile is the controller's and the
 set has a row. Options out of range are said, one sentence an option, and the set is still read
 with each such option at its default.
+
+### Documents for an application that is not .NET
+
+The options of a run, the preflight and the diagnostics are published into the platform's job
+document vocabulary (`[JobDocumentContract]`), so that an application without .NET (a command
+line, an MCP server, a web page) sends and reads them as JSON:
+
+| Type id | Type |
+|---|---|
+| `smt.options@1` | `SmtOptionsData`, the options a request document gives `SmtRun` and `SmtPreflight` |
+| `smt.preflight@1` | `SmtPreflightData`, the `result` of `SmtPreflight` |
+| `smt.diagnostics@1` | `SmtRuntimeDiagnosticsData`, the `result` of `SmtRuntimeDiagnostics` |
+| `smt.count@1` | `SmtCountData`, a count of the preflight |
+| `smt.refusal@1` | `SmtRefusalData`, a refusal of the preflight |
+
+A member is named by its name in the type in camel case (`hardCapSeconds`, `samplingRate`), a
+query by its word (`check`, `enumerate`, `prove`), and a member a document leaves out is its
+default. The server refuses a document of the options with a member they do not have, so that a
+misspelt name never leaves an option at its default without a word. The package carries under
+`documents/` what an application needs without .NET: `smt.schema.json`, the JSON Schema of the five
+types, and `smt_documents.py` and `smt_documents.hpp`, bindings for Python and C++; they are
+written from these types by the build (`OutWit.Cloud.Documents.Generator`, a build-time package and
+no dependency of this one). The request with its options, and what the server refuses, are the
+controller's
+[application page, *The request as a document*](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md#the-request-as-a-document).
+A type id keeps its members; a type whose members change is published under the next major (`@2`).

@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Attributes;
 using OutWit.Common.Values;
@@ -15,7 +16,12 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// Nothing here names the machine: the platform is a runtime identifier, the cores and the
 /// memory are numbers, and a reason is in fixed words without a path.
 /// </para>
+/// <para>
+/// Published into the platform's job document vocabulary as <c>smt.diagnostics@1</c>: an
+/// application that is not .NET reads the diagnostics as a document of this type.
+/// </para>
 /// </summary>
+[JobDocumentContract("smt.diagnostics@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
 // changes only behind a version fence, so that no reader of the old layout is ever handed the

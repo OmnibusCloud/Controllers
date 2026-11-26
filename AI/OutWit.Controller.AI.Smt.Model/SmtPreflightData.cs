@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Attributes;
 using OutWit.Common.Collections;
@@ -13,7 +14,12 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// a bound, never an estimate of how long a run takes), the memory a node needs for one session,
 /// and the packages a run would be cut into. Small whatever the set: the refusals are counted by
 /// code and the first <see cref="MAX_REFUSALS"/> of them are kept in full.
+/// <para>
+/// Published into the platform's job document vocabulary as <c>smt.preflight@1</c>: an application
+/// that is not .NET reads a preflight as a document of this type.
+/// </para>
 /// </summary>
+[JobDocumentContract("smt.preflight@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
 // changes only behind a version fence, so that no reader of the old layout is ever handed the

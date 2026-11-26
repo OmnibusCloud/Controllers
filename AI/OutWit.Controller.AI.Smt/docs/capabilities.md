@@ -66,6 +66,9 @@ few numbers.
 `profile`, `query`, `max_models`, `seed`, `rlimit`, `hard_cap_s`, `memory_mb` and `sampling_rate`:
 their table, with the least value of each, what 0 means, the default, the greatest and the
 sentence each is refused with, is [application.md, *The options*](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md#the-options).
+An application that is not .NET sends them in a request document, as a document of the type
+`smt.options@1`, and reads the preflight and the diagnostics as documents of `smt.preflight@1` and
+`smt.diagnostics@1` ([application.md, *The request as a document*](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md#the-request-as-a-document)).
 
 A run whose options are out of range, or name a profile the controller does not have, is
 refused before anything is sent. The documents state every option as the number the run used,

@@ -1,3 +1,6 @@
 # The published schema of a problem set's row goes into the package as it is: LF on every
 # checkout, so the package carries the same bytes whatever machine packs it
 docs/*.schema.json text eol=lf
+# The job document vocabulary the generator writes from the published types: LF as it writes
+# them, so the package carries the same bytes and the build server's check reads what it wrote
+Documents/* text eol=lf

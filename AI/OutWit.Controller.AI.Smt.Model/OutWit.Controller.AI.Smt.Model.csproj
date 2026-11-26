@@ -6,9 +6,32 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Smt</ControllerName>
     <Version>0.3.0</Version>
-    <Description>The language layer and data types of the OutWit Smt controller: a strict SMT-LIB 2.6 reader with shape limits, shared by everything that reads a problem before a solver does, and the wire types of the packages a node solves and returns.</Description>
-    <PackageTags>smt;smt-lib;z3;witengine;witcloud;controller;data-types</PackageTags>
+    <Description>The language layer and data types of the OutWit Smt controller: a strict SMT-LIB 2.6 reader with shape limits, shared by everything that reads a problem before a solver does, and the wire types of the packages a node solves and returns. The options of a run, the preflight and the diagnostics are published as job documents (smt.options@1, smt.preflight@1, smt.diagnostics@1) for applications that are not .NET, with the schema and the Python and C++ bindings under documents/.</Description>
+    <PackageTags>smt;smt-lib;z3;witengine;witcloud;controller;data-types;job-documents</PackageTags>
   </PropertyGroup>
+
+  <!-- The job document vocabulary: an application that is not .NET sends a run's options, and
+       reads the preflight and the diagnostics, as JSON documents of the types published with
+       [JobDocumentContract] (smt.options@1, smt.preflight@1, smt.diagnostics@1, and smt.count@1
+       and smt.refusal@1, which the preflight is made of). The generator is a build-time package
+       and no dependency of this one: it compiles the attribute into this assembly (the server
+       matches it by its full name) and, after a build, writes the vocabulary into Documents/: the
+       schema and the bindings for Python and C++, with the summaries of the documentation file.
+       The files are committed and packed under documents/. On the build server (and wherever the
+       build is a continuous-integration build) it holds the committed files to the types
+       instead, and a file that is not what the types give fails the build. -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <OcDocumentsCheck Condition="'$(OcDocumentsCheck)' == '' And '$(GITHUB_ACTIONS)' == 'true'">true</OcDocumentsCheck>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.Documents.Generator" Version="1.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Documents\**" Exclude="Documents\**\__pycache__\**" Pack="true" PackagePath="documents\" />
+  </ItemGroup>
 
   <!-- The schema of a problem set's row, the contract a lab writes to: packed under docs/,
        beside the README that names it. -->
