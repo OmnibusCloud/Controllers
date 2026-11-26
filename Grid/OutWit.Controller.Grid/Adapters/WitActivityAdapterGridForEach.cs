@@ -78,74 +78,92 @@ namespace OutWit.Controller.Grid.Adapters
             IReadOnlyList<IWitEngineActivityNode> nodes
                 = await NodesManager.GetCompatibleNodes(benchmarkActivityType, options);
 
+            // A typed return collection takes a list whole or not at all. Every value a node returns is
+            // therefore held to what the collection takes before it joins the results: one null or one
+            // value of another type must cost the call that value, not all of them.
+            //
+            // A return collection may also ask to be told which item each value answers (it declares
+            // OnGridAnswer). Its rule then tells it of every value that is kept, with the item of the
+            // return slot the value came under. The slots and their items are written down while the
+            // tasks are built, for such a collection only, and stay here on the host: a task carries
+            // nothing of them.
+            var slotItems = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+            GridValueRule values = GridValueRule.ForCollection(FindReturnCollection(pool, activity.ReturnReference), slotItems, LogWarning);
+
             IReadOnlyList<WitGridTask> tasks
-                = BuildTasks(collection, activity.Transformer, pool, iterationVariableName, options, nodes);
+                = BuildTasks(collection, activity.Transformer, pool, iterationVariableName, options, nodes, values.Tells ? slotItems : null);
 
             // A batch with copies must not be moved by the server: a substitute could be the machine
             // holding the other copy. Reassignment below decides where the work goes instead.
             bool exactNode = tasks.Any(task => task.ReplicaOf != null);
 
-            // A typed return collection takes a list whole or not at all. Every value a node returns is
-            // therefore held to what the collection takes before it joins the results: one null or one
-            // value of another type must cost the call that value, not all of them.
-            GridValueRule values = GridValueRule.ForCollection(FindReturnCollection(pool, activity.ReturnReference));
-
             var resultList = new List<object?>();
 
-            if (options.Strategy == ProcessingStrategy.Queued)
+            try
             {
-                var (queuedStatus, queuedVariables) = await NodesManager.ProcessQueued(nodes, tasks, status.JobId, values, LogWarning);
-                status.AddChild(queuedStatus);
+                if (options.Strategy == ProcessingStrategy.Queued)
+                {
+                    var (queuedStatus, queuedVariables) = await NodesManager.ProcessQueued(nodes, tasks, status.JobId, values, LogWarning);
+                    status.AddChild(queuedStatus);
 
-                foreach (var variable in queuedVariables)
-                    resultList.Add(variable.Value);
+                    foreach (var variable in queuedVariables)
+                        resultList.Add(variable.Value);
+                }
+                else
+                {
+                    var canRunInParallelOnClient = ResolveClientParallelPolicy(tasks);
+
+                    // Fault-tolerant distribution: a node that FAILS its batch has its tasks reassigned to the
+                    // remaining healthy nodes and retried, instead of failing the whole job because one machine
+                    // died. Cancellation is honoured inside DistributeAsync (a node renders its whole batch
+                    // before reporting; on cancel the orphaned groups finish in the background and are ignored).
+                    // The job fails only when no node can complete the work — a genuine error surfaced with the
+                    // last node's message.
+                    var outcome = await GridReassignment.DistributeAsync(
+                        nodes,
+                        tasks,
+                        async (group, _) =>
+                        {
+                            try
+                            {
+                                (IWitProcessingStatus groupStatus, IReadOnlyList<IWitVariable> groupVariables)
+                                    = await NodesManager.Process(group, status.JobId, canRunInParallelOnClient, exactNode);
+
+                                bool succeeded = groupStatus.Result != WitProcessingResult.Failed;
+                                return new GridReassignment.GroupProcessResult(succeeded, groupStatus, groupVariables);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                throw;
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.LogWarning(ex, "Node {NodeId} threw while processing its task batch; treating it as a node failure.", group.Node.NodeId);
+                                return new GridReassignment.GroupProcessResult(false, null, Array.Empty<IWitVariable>());
+                            }
+                        },
+                        LogWarning,
+                        values,
+                        ProcessingManager.CancellationToken(status.JobId));
+
+                    foreach (var groupStatus in outcome.CompletedStatuses)
+                        status.AddChild(groupStatus);
+
+                    if (outcome.Failed)
+                        throw new InvalidOperationException(
+                            outcome.FailureMessage ?? "Distributed processing failed on all available nodes.");
+
+                    foreach (var value in outcome.Results)
+                        resultList.Add(value);
+                }
             }
-            else
+            finally
             {
-                var canRunInParallelOnClient = ResolveClientParallelPolicy(tasks);
-
-                // Fault-tolerant distribution: a node that FAILS its batch has its tasks reassigned to the
-                // remaining healthy nodes and retried, instead of failing the whole job because one machine
-                // died. Cancellation is honoured inside DistributeAsync (a node renders its whole batch
-                // before reporting; on cancel the orphaned groups finish in the background and are ignored).
-                // The job fails only when no node can complete the work — a genuine error surfaced with the
-                // last node's message.
-                var outcome = await GridReassignment.DistributeAsync(
-                    nodes,
-                    tasks,
-                    async (group, _) =>
-                    {
-                        try
-                        {
-                            (IWitProcessingStatus groupStatus, IReadOnlyList<IWitVariable> groupVariables)
-                                = await NodesManager.Process(group, status.JobId, canRunInParallelOnClient, exactNode);
-
-                            bool succeeded = groupStatus.Result != WitProcessingResult.Failed;
-                            return new GridReassignment.GroupProcessResult(succeeded, groupStatus, groupVariables);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.LogWarning(ex, "Node {NodeId} threw while processing its task batch; treating it as a node failure.", group.Node.NodeId);
-                            return new GridReassignment.GroupProcessResult(false, null, Array.Empty<IWitVariable>());
-                        }
-                    },
-                    LogWarning,
-                    values,
-                    ProcessingManager.CancellationToken(status.JobId));
-
-                foreach (var groupStatus in outcome.CompletedStatuses)
-                    status.AddChild(groupStatus);
-
-                if (outcome.Failed)
-                    throw new InvalidOperationException(
-                        outcome.FailureMessage ?? "Distributed processing failed on all available nodes.");
-
-                foreach (var value in outcome.Results)
-                    resultList.Add(value);
+                // The method of a collection that asked to be told is the controller's code and may
+                // throw. No value is lost for it; one warning a call says how often it threw, however
+                // the call ends. A collection that did not ask has nothing to say here.
+                values.WarnOfUntold(LogWarning);
             }
 
             StoreResults(activity, pool, resultList);
@@ -157,10 +175,11 @@ namespace OutWit.Controller.Grid.Adapters
         }
 
         private IReadOnlyList<WitGridTask> BuildTasks(IEnumerable collection, IWitActivity transformer, IWitVariablesCollection pool,
-            string iterationVariableName, WitProcessingOptions options, IReadOnlyList<IWitEngineActivityNode> nodes)
+            string iterationVariableName, WitProcessingOptions options, IReadOnlyList<IWitEngineActivityNode> nodes,
+            IDictionary<string, object?>? slotItems)
         {
             if (options.Replicas <= 1)
-                return ControllerManager.BuildTasks(collection, transformer, pool, iterationVariableName);
+                return ControllerManager.BuildTasks(collection, transformer, pool, iterationVariableName, slotItems);
 
             var items = collection.Cast<object>().ToList();
             int machines = nodes.Select(node => node.NodeId).Distinct().Count();
@@ -168,8 +187,8 @@ namespace OutWit.Controller.Grid.Adapters
             IReadOnlyList<int>? slots = WitGridReplicaPlanner.Plan(items.Count, options.Replicas, options.ReplicaShare, machines);
 
             return slots == null
-                ? ControllerManager.BuildTasks(items, transformer, pool, iterationVariableName)
-                : ControllerManager.BuildTasks(items, slots, transformer, pool, iterationVariableName);
+                ? ControllerManager.BuildTasks(items, transformer, pool, iterationVariableName, slotItems)
+                : ControllerManager.BuildTasks(items, slots, transformer, pool, iterationVariableName, slotItems);
         }
 
         #endregion

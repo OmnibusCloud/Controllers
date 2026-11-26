@@ -38,13 +38,15 @@ public static class ProcessingUtils
     /// queue. Every answer is held as a batch's answer is under the Balanced strategy: of what a node
     /// returns for a task, the value under the name that task asked for is kept, once, when the return
     /// collection would take it; anything else is left out with a warning, and the task then has no
-    /// answer. A task without an answer is not sent again.
+    /// answer. A task without an answer is not sent again. A return collection that asks to be told
+    /// which item each value answers is told of a value as it is kept: in the loop of the node that
+    /// answered, so from several threads at once when several nodes answer.
     /// </summary>
     /// <param name="nodesManager">The nodes manager.</param>
     /// <param name="nodes">The nodes that take from the queue.</param>
     /// <param name="tasks">The tasks of the call.</param>
     /// <param name="jobId">The job.</param>
-    /// <param name="values">What the return collection takes; null when it takes every value.</param>
+    /// <param name="values">What the return collection takes; null when it takes every value. The rule of a collection that asks to be told tells it from the nodes' own loops.</param>
     /// <param name="logWarning">Where warnings go; null when nobody listens. It is called from the nodes' own loops.</param>
     /// <returns>The status of the whole run and the values that were kept, in the order of the tasks.</returns>
     /// <exception cref="InvalidOperationException">There is no node to run the tasks.</exception>
