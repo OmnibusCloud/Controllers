@@ -69,13 +69,19 @@ public sealed class SmtDocumentsTests
             AssertLine(MODEL_README, "This page describes \\*\\*(?<m>[0-9][^*]*)\\*\\*", ("m", model));
             AssertLine(SCRIPTS_README, "^\\*\\*Status: (?<s>[0-9][^,*]*),", ("s", scripts));
 
+            // The packages are on nuget.org: a row links to the package's page and shows the version
+            // nuget.org has by its badge, as the rows of the other released controllers do.
             var packages = SmtMarkdown.Table(SmtMarkdown.Read(ROOT_README), "## Published controllers");
-            foreach (var (package, version) in new[] { ("OutWit.Controller.AI.Smt", controller), ("OutWit.Controller.AI.Smt.Model", model), ("OutWit.Controller.AI.Smt.Scripts", scripts) })
+            foreach (var package in new[] { "OutWit.Controller.AI.Smt", "OutWit.Controller.AI.Smt.Model", "OutWit.Controller.AI.Smt.Scripts" })
             {
+                var page = $"https://www.nuget.org/packages/{package}";
                 var rows = packages.Rows.Where(row => SmtMarkdown.Codes(row[0]).FirstOrDefault() == package).ToList();
                 Assert.That(rows, Has.Count.EqualTo(1), $"{ROOT_README}: a row of {package}");
                 if (rows.Count == 1)
-                    Assert.That(rows[0][1], Does.StartWith(version + " "), $"{ROOT_README}: the version of {package} is its project's; move the row with the project");
+                {
+                    Assert.That(rows[0][0], Does.StartWith($"[`{package}`]({page}) "), $"{ROOT_README}: the row of {package} links to its page on nuget.org");
+                    Assert.That(rows[0][1], Is.EqualTo($"[![NuGet](https://img.shields.io/nuget/v/{package}.svg?label=)]({page})"), $"{ROOT_README}: the row of {package} shows nuget.org's version by its badge");
+                }
             }
         });
     }

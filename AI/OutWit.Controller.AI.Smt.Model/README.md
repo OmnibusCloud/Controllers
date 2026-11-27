@@ -8,7 +8,7 @@ the script builders, the problem set (its rows, its reader, its schema, the opti
 the model evaluator that checks a `sat` answer, the wire types of a node's work (a package of
 problems, a row, a package of rows, the diagnostics), and the types of a run on the host (its
 preflight and the words of its documents), and the documents an application that is not .NET
-sends and reads. The first release: on GitHub Packages and the test server, not on nuget.org.
+sends and reads. The first release, on nuget.org.
 
 ## Reading SMT-LIB
 

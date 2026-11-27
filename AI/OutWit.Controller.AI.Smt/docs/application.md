@@ -9,7 +9,7 @@ states the guarantees and the limits, the schemas beside it are the contract of 
 and the model package's [README](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Model/README.md)
 is the problem set, the reader, the sanitizer and the evaluator.
 
-Written for **Smt 1.0.0** (with Smt.Model 1.0.0 and Smt.Scripts 1.0.0). The examples on this
+Written for **Smt 1.0.0** (with Smt.Model 1.0.0 and Smt.Scripts 1.0.1). The examples on this
 page are written by the controller's own code: a test runs them and holds the page to what the
 code writes.
 

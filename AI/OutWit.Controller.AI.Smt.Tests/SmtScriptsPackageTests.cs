@@ -5,11 +5,11 @@ namespace OutWit.Controller.AI.Smt.Tests;
 
 /// <summary>
 /// The scripts package (<c>OutWit.Controller.AI.Smt.Scripts</c>): it packs the bundled scripts the
-/// controller's folder holds, and its compatibility marker, written and commented out while no
-/// controller is on nuget.org, holds the release it waits for. The first public release of a
-/// product is 1.0.0 at the earliest, so a range that ends at 1.0.0 (the next major of 0.4.0, the
-/// first version whose activities the scripts call: Smt.Repairs takes the rate since then) would
-/// refuse the very release it waits for.
+/// controller's folder holds, and depends on the controller by its compatibility marker, a
+/// half-open range from 1.0.0, the controller's first release and the first version on nuget.org
+/// (the first with every activity the scripts call: Smt.Forget is new in it), to the next major.
+/// The scripts' 1.0.0 went out without the marker, so the package that carries it is a later
+/// version.
 /// </summary>
 [TestFixture]
 public sealed class SmtScriptsPackageTests
@@ -20,8 +20,7 @@ public sealed class SmtScriptsPackageTests
     private const string SCRIPTS_FOLDER = "AI/OutWit.Controller.AI.Smt/Scripts";
     private const string CONTROLLER_PACKAGE = "OutWit.Controller.AI.Smt";
 
-    private static readonly Version FIRST_PUBLIC = new(1, 0, 0);
-    private static readonly Version ACTIVITIES_SINCE = new(0, 4, 0);
+    private static readonly Version FIRST_RELEASE = new(1, 0, 0);
     private static readonly string[] SCRIPTS = ["SmtPreflight.wit", "SmtRun.wit", "SmtRuntimeDiagnostics.wit"];
 
     #endregion
@@ -29,7 +28,7 @@ public sealed class SmtScriptsPackageTests
     #region Tests
 
     [Test]
-    public void TheMarkerAcceptsTheReleaseItWaitsForTest()
+    public void TheMarkerStartsAtTheFirstReleaseTest()
     {
         var text = Read(SCRIPTS_PROJECT);
         var marker = Regex.Match(text, $"<PackageReference\\s+Include=\"{Regex.Escape(CONTROLLER_PACKAGE)}\"\\s+Version=\"\\[(?<lower>[0-9.]+),\\s*(?<upper>[0-9.]+)\\)\"");
@@ -41,25 +40,25 @@ public sealed class SmtScriptsPackageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(lower, Is.GreaterThanOrEqualTo(ACTIVITIES_SINCE), "no lower than the first version with the activities the scripts call");
-            Assert.That(lower, Is.LessThanOrEqualTo(FIRST_PUBLIC), "the range starts at or before the controller's first public release");
-            Assert.That(upper, Is.GreaterThan(FIRST_PUBLIC), "and does not end before it");
+            Assert.That(lower, Is.EqualTo(FIRST_RELEASE), "the range starts at the controller's first release: the first version on nuget.org, and the first with every activity the scripts call");
             Assert.That(upper, Is.EqualTo(new Version(lower.Major + 1, 0, 0)), "it ends at the next major, exclusive, as the decision record says");
         });
     }
 
     [Test]
-    public void TheMarkerWaitsCommentedOutTest()
+    public void TheMarkerIsEnabledTest()
     {
         var text = Read(SCRIPTS_PROJECT);
         var marker = text.IndexOf($"<PackageReference Include=\"{CONTROLLER_PACKAGE}\"", StringComparison.Ordinal);
         var opened = text.LastIndexOf("<!--", marker, StringComparison.Ordinal);
         var closed = text.LastIndexOf("-->", marker, StringComparison.Ordinal);
+        var version = Version.Parse(Regex.Match(text, "<Version>(?<v>[^<]+)</Version>").Groups["v"].Value);
 
         Assert.Multiple(() =>
         {
             Assert.That(marker, Is.GreaterThan(0));
-            Assert.That(opened, Is.GreaterThan(closed), "no feed has the controller yet: a reference to it would break every restore");
+            Assert.That(opened, Is.LessThan(closed), "the controller is on nuget.org: the reference is part of the project, not a comment");
+            Assert.That(version, Is.GreaterThan(FIRST_RELEASE), "the scripts' 1.0.0 went out without the marker: the package with it is a later version");
         });
     }
 
