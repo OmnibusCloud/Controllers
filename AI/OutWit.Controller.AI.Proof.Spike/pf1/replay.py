@@ -38,6 +38,7 @@ def main() -> int:
     parser.add_argument("--cap-min", type=float, default=120)
     parser.add_argument("--budget-min", type=float, default=0, help="no step starts after this many minutes")
     parser.add_argument("--label", default="")
+    parser.add_argument("--memory-gib", type=float, default=0, help="a memory cap for each step (0: none)")
     options = parser.parse_args()
     lower_priority()
     root = os.path.abspath(options.root)
@@ -83,7 +84,8 @@ def main() -> int:
                                      paranoid=step == "comparator-paranoid")
             row = capped(cmd, env=env, cwd=folder, timeout=cap * (4 if step == "comparator-paranoid" else 1))
         else:
-            row = capped(kernel_command(root, step, export, folder), env=env, cwd=folder, timeout=cap)
+            row = capped(kernel_command(root, step, export, folder), env=env, cwd=folder, timeout=cap,
+                         memory_gib=options.memory_gib or None)
         record["steps"][step] = row
         print(json.dumps({k: row.get(k) for k in ("exit", "wall_s", "user_s", "peak_rss", "killed")}),
               (row.get("says") or "")[-300:], flush=True)

@@ -1,1 +1,1 @@
-whole: run 1 (2026-11-27)
+whole: run 2 (2026-11-27): one kernel a job, each under a 13 GiB scope (run 1's kernels job lost its runner)

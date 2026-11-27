@@ -39,12 +39,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { part: kernels, steps: "leanchecker,nanoda-4,con-ron,con-leche" }
-          - { part: split, steps: "driver-profile,driver-slices" }
+          - { part: leanchecker, steps: "leanchecker" }
+          - { part: nanoda, steps: "nanoda-4" }
+          - { part: con-ron, steps: "con-ron" }
+          - { part: con-leche, steps: "con-leche" }
     runs-on: ubuntu-24.04
     timeout-minutes: 355
     env:
       OUT: results-whole-${{ matrix.part }}
+      # Each kernel in a systemd scope capped below the runner's memory: a kernel that needs more is
+      # stopped and says so, instead of starving the runner (run 1 lost its runner that way).
+      PF1_CGROUP: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -67,7 +72,7 @@ jobs:
       - name: Replay
         timeout-minutes: 300
         run: |
-          python "$PF1/replay.py" --root "$PIN_ROOT" --export "$PF0_WORK/whole/mathlib.ndjson" --steps "${{ matrix.steps }}" --driver "$DRIVER" --slices 4 --out "$OUT/replay.json" --cap-min 100 --budget-min 270 --label "mathlib-${{ matrix.part }}"
+          python "$PF1/replay.py" --root "$PIN_ROOT" --export "$PF0_WORK/whole/mathlib.ndjson" --steps "${{ matrix.steps }}" --driver "$DRIVER" --slices 4 --out "$OUT/replay.json" --cap-min 120 --budget-min 270 --memory-gib 13 --label "mathlib-${{ matrix.part }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() }}
         with:
