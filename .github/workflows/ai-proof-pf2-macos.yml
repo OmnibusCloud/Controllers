@@ -1,0 +1,141 @@
+name: AI Proof PF-2 macOS comparator in sandbox-exec
+run-name: "AI Proof PF-2 macOS comparator in sandbox-exec: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), isolation option (c): under the deny-by-default
+# sandbox-exec profile `which git` fails, so `lake comparator` will not start (isolation runs 4-6).
+# Variants of the profile with what `which` may need, the sandbox's own denials logged, and the
+# comparator tree on kit R1 under the first variant that lets it start. Nothing is published.
+# A run starts when pf2/run/macos.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/macos.txt'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ai-proof-pf2-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  macos:
+    name: osx-arm64
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      OUT: results-macos-comparator
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine and toolchain
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          python "$PF1/lean.py" fetch --version "$PIN" --rid osx-arm64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Kit R1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(python "$PF2/grh.py" pin R1_KIT_RUN)
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name kit-R1 --dir kit
+          python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, os.environ["PF1"])
+          from common import decompress
+          job = os.path.join(os.environ["PF0_WORK"], "job")
+          os.makedirs(job, exist_ok=True)
+          for name in ("solution", "challenge"):
+              print(name, decompress(f"kit/{name}.ndjson.zst", os.path.join(job, f"{name}.ndjson")))
+          EOF
+          rm -rf kit
+      - name: Profile variants for `which`
+        run: |
+          set +e
+          python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, os.path.join(os.environ["PF2"], "isolation"))
+          sys.path.insert(0, os.environ["PF2"])
+          import isolation
+          root = os.path.realpath(os.environ["PIN_ROOT"])
+          job = os.path.realpath(os.path.join(os.environ["PF0_WORK"], "job"))
+          base = isolation.macos_profile(root, job, False, "strict", tools=True)
+          extra = {
+              "base": "",
+              "test-existence": "(allow file-test-existence)\n",
+              "homebrew": '(allow file-read* (subpath "/opt/homebrew") (subpath "/usr/local"))\n',
+              "both": '(allow file-test-existence)\n(allow file-read* (subpath "/opt/homebrew") (subpath "/usr/local"))\n',
+              "read-all": "(allow file-read*)\n",
+          }
+          for name, text in extra.items():
+              # A later rule wins: the extra lines go before the final network denial.
+              profile = base.replace("(deny network*)", text + "(deny network*)")
+              open(os.path.join(job, f"which-{name}.sb"), "w").write(profile)
+          EOF
+          chosen=""
+          for v in base test-existence homebrew both read-all; do
+            out=$(sandbox-exec -f "$PF0_WORK/job/which-$v.sb" /usr/bin/which git 2>&1); code=$?
+            out2=$(sandbox-exec -f "$PF0_WORK/job/which-$v.sb" /usr/bin/which env 2>&1); code2=$?
+            echo "variant $v: which git -> $code '$out'; which env -> $code2 '$out2'" | tee -a "$OUT/which-variants.txt"
+            if [ -z "$chosen" ] && [ $code = 0 ] && [ $code2 = 0 ]; then chosen=$v; fi
+          done
+          sleep 2
+          log show --last 3m --style compact --predicate 'sender == "Sandbox" OR eventMessage CONTAINS "deny("' 2>/dev/null | grep -i deny | sed 's/.*deny/deny/' | sort | uniq -c | sort -rn | head -40 > "$OUT/which-denials.txt"
+          cat "$OUT/which-denials.txt"
+          echo "CHOSEN=${chosen:-none}" >> "$GITHUB_ENV"
+          echo "${chosen:-none}" > "$OUT/which-chosen.txt"
+          exit 0
+      - name: The comparator tree under the chosen variant
+        if: ${{ env.CHOSEN != 'none' }}
+        run: |
+          set +e
+          THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
+          python - "$THEOREMS" <<'EOF'
+          import json, os, sys
+          sys.path.insert(0, os.environ["PF2"])
+          sys.path.insert(0, os.environ["PF1"])
+          from tree import run_tree
+          from common import comparator_command, comparator_config, lean_env
+          root = os.path.realpath(os.environ["PIN_ROOT"])
+          job = os.path.realpath(os.path.join(os.environ["PF0_WORK"], "job"))
+          config = comparator_config(os.path.join(job, "pf2-comparator.json"), sys.argv[1].split(","),
+                                     ["propext", "Quot.sound", "Classical.choice"])
+          cmd = comparator_command(root, config, os.path.join(job, "challenge.ndjson"), os.path.join(job, "solution.ndjson"), sandbox=False)
+          profile = os.path.join(job, f"which-{os.environ['CHOSEN']}.sb")
+          record = {}
+          for label, argv in (("raw", cmd), ("sandbox-exec", ["sandbox-exec", "-f", profile] + cmd)):
+              for attempt in (1, 2):
+                  row = run_tree(argv, env=lean_env(root, None), cwd=job, timeout=1800, stack_unlimited=True)
+                  row.pop("stdout_tail", None)
+                  record[f"{label}/{attempt}"] = row
+                  print(label, attempt, row["ending"], row["wall_s"], row["tree_rss"], row["says"][-200:], flush=True)
+          json.dump(record, open(os.path.join(os.environ["OUT"], "comparator.json"), "w"), indent=1)
+          EOF
+          log show --last 10m --style compact --predicate 'sender == "Sandbox" OR eventMessage CONTAINS "deny("' 2>/dev/null | grep -i deny | sed 's/.*deny/deny/' | sort | uniq -c | sort -rn | head -40 > "$OUT/comparator-denials.txt"
+          cat "$OUT/comparator-denials.txt"
+          exit 0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-macos-comparator
+          path: results-macos-comparator
+          retention-days: 14
