@@ -27,6 +27,19 @@ PRIMITIVES = ["Nat.add", "Nat.sub", "Nat.mul", "Nat.pow", "Nat.gcd", "Nat.div", 
               "optParam", "autoParam", "semiOutParam", "outParam"]
 
 
+def lower_priority() -> None:
+    """Below normal (Windows) or nice 10 (elsewhere) for this process and every child it starts,
+    when PF1_BELOW_NORMAL=1: a machine that is a node of a fleet keeps its cores for its client."""
+    if os.environ.get("PF1_BELOW_NORMAL") != "1":
+        return
+    if IS_WINDOWS:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), 0x4000)
+    else:
+        os.nice(10)
+
+
 def export_targets(theorems: list, axioms: list | None = None) -> list:
     """The names an export is made with, as `lake comparator` makes its own."""
     return QUOT + list(theorems) + list(axioms or STANDARD_AXIOMS) + PRIMITIVES

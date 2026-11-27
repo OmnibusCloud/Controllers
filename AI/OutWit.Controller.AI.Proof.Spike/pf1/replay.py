@@ -22,7 +22,7 @@ import sys
 import time
 
 from common import (IS_LINUX, capped, comparator_command, comparator_config, kernel_command, lean_env,
-                    write_json)
+                    lower_priority, write_json)
 
 
 def main() -> int:
@@ -39,6 +39,7 @@ def main() -> int:
     parser.add_argument("--budget-min", type=float, default=0, help="no step starts after this many minutes")
     parser.add_argument("--label", default="")
     options = parser.parse_args()
+    lower_priority()
     root = os.path.abspath(options.root)
     export = os.path.abspath(options.export)
     folder = os.path.join(os.path.dirname(os.path.abspath(options.out)), "replay-work")
