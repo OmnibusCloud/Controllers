@@ -1,0 +1,1 @@
+compare: run 1 (2026-11-27): the doctored copies of the compact export against con-ron and con-leche --compare

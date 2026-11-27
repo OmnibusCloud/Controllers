@@ -1,0 +1,84 @@
+name: AI Proof PF-2 doctored copies against the independent comparisons
+run-name: "AI Proof PF-2 doctored copies, independent comparisons: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike): the doctored copies of the compact RH/GRH export
+# (a definition the statement uses with other reducibility hints; a statement redefined as True
+# with its theorem proved by True.intro; a theorem removed; the export cut before the first main
+# theorem) judged by the two independent statement comparisons (con-ron and con-leche --compare,
+# at the commits the MIT report pins), as lake comparator judged them in the RH run. Nothing is
+# published. A run starts when pf2/run/compare.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/compare.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf2-compare-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+  PF1_CGROUP: "1"
+  CAP_GIB: 13
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  compare:
+    name: doctored copies, independent comparisons
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-doctored-compare
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Build con-ron and con-leche --compare
+        timeout-minutes: 90
+        run: |
+          CONRON_REPO=$(python "$PF2/grh.py" pin CONRON_REPO); CONRON_COMPARE_COMMIT=$(python "$PF2/grh.py" pin CONRON_COMPARE_COMMIT)
+          CONLECHE_REPO=$(python "$PF2/grh.py" pin CONLECHE_REPO); CONLECHE_COMPARE_COMMIT=$(python "$PF2/grh.py" pin CONLECHE_COMPARE_COMMIT)
+          git init -q "$PF0_WORK/con-ron" && git -C "$PF0_WORK/con-ron" fetch -q --depth 1 "$CONRON_REPO" "$CONRON_COMPARE_COMMIT" && git -C "$PF0_WORK/con-ron" checkout -q FETCH_HEAD
+          (cd "$PF0_WORK/con-ron" && cargo build --release --locked -p con-ron 2>&1 | tail -3)
+          git init -q "$PF0_WORK/con-leche" && git -C "$PF0_WORK/con-leche" fetch -q --depth 1 "$CONLECHE_REPO" "$CONLECHE_COMPARE_COMMIT" && git -C "$PF0_WORK/con-leche" checkout -q FETCH_HEAD
+          (cd "$PF0_WORK/con-leche" && PATH="$PIN_ROOT/bin:$PATH" lake build con-leche 2>&1 | tail -3)
+      - name: Fetch the exports
+        timeout-minutes: 90
+        run: python "$PF2/grh.py" fetch --what challenge,compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Doctor and compare
+        timeout-minutes: 240
+        run: |
+          for variant in hints-rh true-primitive removed truncated; do
+            copy="$PF0_WORK/grh/doctored-$variant.ndjson"
+            python "$PF2/grh.py" doctor --source "$PF0_WORK/grh/compact-solution.ndjson" --variant "$variant" --target "$copy" --out "$OUT/doctor-$variant.json"
+            python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$copy" --challenge "$PF0_WORK/grh/challenge.ndjson" --steps ron-compare,leche-compare --out "$OUT/run-$variant.json" --memory-gib "$CAP_GIB" --cap-min 40 --stack-unlimited --ron-compare "$PF0_WORK/con-ron/target/release/con-ron" --leche-compare "$PF0_WORK/con-leche/.lake/build/bin/con-leche" --label "doctored-$variant-compare"
+            rm -f "$copy"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-doctored-compare
+          path: results-doctored-compare
+          retention-days: 14
