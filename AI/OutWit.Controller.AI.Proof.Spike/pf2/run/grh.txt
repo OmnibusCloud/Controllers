@@ -1,0 +1,1 @@
+grh: run 1 (2026-11-27): the published RH/GRH exports, the pre-check, every kernel in a 13 GiB scope, comparator, the comparisons, doctored copies

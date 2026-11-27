@@ -1,0 +1,203 @@
+name: AI Proof PF-2 wasm kernels
+run-name: "AI Proof PF-2 wasm kernels: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), isolation option (a): the two Rust kernels of the pinned
+# toolchain (nanoda and con-ron, at the commits Lean 4.36.0 builds them from) compiled for
+# wasm32-wasip1 and run by the wasmtime CLI of the version our shared wasm host pins (48.0.8),
+# against the kernels as Lean ships them: PF-1's kit R1 on four platforms, the compact RH/GRH
+# export on linux-x64. The .wasm files are built once and travel to the other jobs as a one-day
+# artifact of this run; nothing is published. A run starts when pf2/run/wasm.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/wasm.txt'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ai-proof-pf2-wasm-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build for wasm32-wasip1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      OUT: results-wasm-build
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Rust
+        run: |
+          mkdir -p "$OUT" wasm-kernels
+          rustup target add wasm32-wasip1
+          { rustc --version; cargo --version; rustc --print target-list | grep -i wasm; } | tee "$OUT/rust.txt"
+      - name: nanoda (the commit Lean 4.36.0 builds)
+        run: |
+          COMMIT=$(python "$PF2/grh.py" pin NANODA_COMMIT); REPO=$(python "$PF2/grh.py" pin NANODA_REPO)
+          git init -q nanoda && git -C nanoda fetch -q --depth 1 "$REPO" "$COMMIT" && git -C nanoda checkout -q FETCH_HEAD
+          cd nanoda
+          s=$(date +%s); cargo build --release --locked 2>&1 | tail -2; n=$(( $(date +%s) - s ))
+          # A 16 MiB shadow stack in linear memory, as the native checker threads have.
+          s=$(date +%s); RUSTFLAGS="-C link-arg=-zstack-size=16777216" cargo build --release --locked --target wasm32-wasip1 2>&1 | tail -2; w=$(( $(date +%s) - s ))
+          cp target/wasm32-wasip1/release/nanoda_bin.wasm ../wasm-kernels/nanoda.wasm
+          cp target/release/nanoda_bin ../wasm-kernels/nanoda-native-linux-x64
+          echo "{\"commit\": \"$COMMIT\", \"native_build_s\": $n, \"wasm_build_s\": $w}" > "../$OUT/nanoda.json"
+      - name: con-ron (the commit Lean 4.36.0 builds; no mimalloc, the check on the main thread under WASI)
+        run: |
+          COMMIT=$(python "$PF2/grh.py" pin CONRON_COMMIT); REPO=$(python "$PF2/grh.py" pin CONRON_REPO)
+          git init -q con-ron && git -C con-ron fetch -q --depth 1 "$REPO" "$COMMIT" && git -C con-ron checkout -q FETCH_HEAD
+          python "$PF2/wasm/patch_conron.py" con-ron
+          cd con-ron
+          s=$(date +%s); cargo build --release --locked -p con-ron 2>&1 | tail -2; n=$(( $(date +%s) - s ))
+          s=$(date +%s); RUSTFLAGS="-C link-arg=-zstack-size=16777216" cargo build --release --locked -p con-ron --target wasm32-wasip1 2>&1 | tail -2; w=$(( $(date +%s) - s ))
+          cp target/wasm32-wasip1/release/con-ron.wasm ../wasm-kernels/con-ron.wasm
+          cp target/release/con-ron ../wasm-kernels/con-ron-native-linux-x64
+          echo "{\"commit\": \"$COMMIT\", \"native_build_s\": $n, \"wasm_build_s\": $w}" > "../$OUT/con-ron.json"
+      - name: Digests
+        run: |
+          (cd wasm-kernels && sha256sum * | tee "../$OUT/sha256.txt" && ls -la | tee "../$OUT/sizes.txt")
+      # 64-bit memory: wasmtime 48 has memory64, but Rust has no 64-bit WASI target, only the
+      # tier-3 wasm64-unknown-unknown (no file system). One attempt, recorded either way.
+      - name: wasm64 probe
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          rustup toolchain install nightly --profile minimal --component rust-src 2>&1 | tail -1
+          rustc +nightly --print target-list | grep -i wasm64 | tee "$OUT/wasm64-targets.txt"
+          cd nanoda
+          cargo +nightly build --release -Z build-std=std,panic_abort --target wasm64-unknown-unknown 2>&1 | tail -15 | tee "../$OUT/wasm64-build.txt"
+          ls -la target/wasm64-unknown-unknown/release/*.wasm 2>&1 | tee -a "../$OUT/wasm64-build.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wasm-kernels
+          path: wasm-kernels
+          retention-days: 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-wasm-build
+          path: results-wasm-build
+          retention-days: 14
+
+  run:
+    name: run on ${{ matrix.rid }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04 }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm }
+          - { rid: win-x64, os: windows-2022 }
+          - { rid: osx-arm64, os: macos-15 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 355
+    env:
+      OUT: results-wasm-${{ matrix.rid }}
+      CASES: "native-nanoda-1,native-nanoda-4,native-conron-1,native-conron,wasm-nanoda,wasm-conron,wasm-nanoda-epoch,wasm-conron-epoch,wasm-nanoda-fuel,wasm-conron-fuel,wasm-nanoda-stack,wasm-conron-stack,wasm-nanoda-memcap,wasm-nanoda-fuelcap,wasm-nanoda-escape,wasm-nanoda-escape-abs"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: wasm-kernels
+          path: wasm-kernels
+      - name: The same .wasm files
+        run: |
+          python - <<'EOF'
+          import hashlib, os, json
+          out = {n: hashlib.sha256(open(os.path.join("wasm-kernels", n), "rb").read()).hexdigest() for n in sorted(os.listdir("wasm-kernels"))}
+          os.makedirs(os.environ["OUT"], exist_ok=True)
+          json.dump(out, open(os.path.join(os.environ["OUT"], "wasm-sha256.json"), "w"), indent=1)
+          print(out)
+          EOF
+      - name: wasmtime ${{ env.PIN }} and the toolchain
+        run: |
+          python - <<'EOF'
+          import hashlib, os, subprocess, sys, tarfile, zipfile
+          sys.path.insert(0, os.environ["PF2"])
+          rid = "${{ matrix.rid }}"
+          pins = {}
+          for line in open(os.path.join(os.environ["PF2"], "pins.env"), encoding="utf-8"):
+              line = line.strip()
+              if line and not line.startswith("#") and "=" in line:
+                  k, v = line.split("=", 1); pins[k] = v
+          asset, digest = pins[f"WASMTIME__{rid}"].split()
+          url = f"https://github.com/bytecodealliance/wasmtime/releases/download/v{pins['WASMTIME_VERSION']}/{asset}"
+          subprocess.run(["curl", "-fsSL", "--retry", "3", "-o", asset, url], check=True)
+          got = hashlib.sha256(open(asset, "rb").read()).hexdigest()
+          assert got == digest, (got, digest)
+          if asset.endswith(".zip"):
+              zipfile.ZipFile(asset).extractall("wt")
+          else:
+              tarfile.open(asset, "r:xz").extractall("wt", filter="fully_trusted")
+          exe = [os.path.join(r, f) for r, _, fs in os.walk("wt") for f in fs if f in ("wasmtime", "wasmtime.exe")][0]
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"WASMTIME={os.path.abspath(exe)}\n")
+          print(exe, got)
+          EOF
+          "$WASMTIME" --version | tee "$OUT/wasmtime-version.txt"
+          "$WASMTIME" run -W help > "$OUT/wasmtime-W-help.txt" 2>&1 || true
+          "$WASMTIME" run -S help > "$OUT/wasmtime-S-help.txt" 2>&1 || true
+          python "$PF1/lean.py" fetch --version "$PIN" --rid "${{ matrix.rid }}" --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Kit R1 (PF-1's export)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(python "$PF2/grh.py" pin R1_KIT_RUN)
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name kit-R1 --dir kit
+          mkdir -p "$PF0_WORK/r1"
+          python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, os.environ["PF1"])
+          from common import decompress
+          print(decompress("kit/solution.ndjson.zst", os.path.join(os.environ["PF0_WORK"], "r1", "solution.ndjson")))
+          EOF
+          rm -rf kit
+      - name: R1, native and wasm
+        timeout-minutes: 240
+        run: |
+          OWN=""
+          if [ "${{ matrix.rid }}" = linux-x64 ]; then OWN="--native-nanoda wasm-kernels/nanoda-native-linux-x64 --native-conron wasm-kernels/con-ron-native-linux-x64"; chmod +x wasm-kernels/*-native-linux-x64; CASES="$CASES,own-native-nanoda-1,own-native-conron-1"; fi
+          python "$PF2/wasm/wasm.py" run --wasmtime "$WASMTIME" --root "$PIN_ROOT" --export "$PF0_WORK/r1/solution.ndjson" --nanoda wasm-kernels/nanoda.wasm --conron wasm-kernels/con-ron.wasm --cases "$CASES" --out "$OUT/r1.json" --cap-min 40 --label "R1-${{ matrix.rid }}" $OWN
+      - name: The compact RH/GRH export in wasm (linux-x64)
+        if: ${{ matrix.rid == 'linux-x64' }}
+        timeout-minutes: 300
+        run: |
+          rm -rf "$PF0_WORK/r1"
+          python "$PF2/grh.py" fetch --what compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+          python "$PF2/wasm/wasm.py" run --wasmtime "$WASMTIME" --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --nanoda wasm-kernels/nanoda.wasm --conron wasm-kernels/con-ron.wasm --cases wasm-nanoda,wasm-conron --out "$OUT/compact.json" --cap-min 120 --label "compact-linux-x64"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-wasm-${{ matrix.rid }}
+          path: results-wasm-${{ matrix.rid }}
+          retention-days: 14

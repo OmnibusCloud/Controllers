@@ -1,0 +1,279 @@
+name: AI Proof PF-2 RH/GRH exports
+run-name: "AI Proof PF-2 RH/GRH exports: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike): the published exports of the shorter RH/GRH
+# formalization (Andrew Sutherland's MIT report; repository lsernau/grh-lean at 72fead10, Lean
+# 4.35.0, Mathlib 56a00585), fetched from the report's page and checked against its SHA-256 sums,
+# then: our structural pre-check; every kernel of the pinned toolchain (Lean 4.36.0) alone in a
+# 13 GiB systemd scope on a 16 GB runner; lake comparator with the challenge export; the
+# independent statement comparisons; the comparator run and a second kernel run in parallel and
+# in sequence; doctored copies. Nothing is published; the exports stay on the runners.
+# A run starts when pf2/run/grh.txt changes; a newer run waits for the older one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/grh.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf2-grh-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+  # Each capped run is a systemd scope that ends with everything it started (PF-1).
+  PF1_CGROUP: "1"
+  CAP_GIB: 13
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # 1. The exports: fetched, verified, decompressed; our pre-check over all three, three ways.
+  precheck:
+    name: exports and pre-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OUT: results-precheck
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Machine
+        run: |
+          date +%s > job-start.txt
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          mv job-start.txt "$OUT/"
+      - name: Pre-check tool
+        run: dotnet publish "$PF2/precheck/Pf2Precheck.csproj" -c Release -o "$PF0_WORK/precheck" -nologo -v q
+      - name: Fetch the exports
+        timeout-minutes: 90
+        run: python "$PF2/grh.py" fetch --what challenge,compact,readable --dest "$PF0_WORK/grh" --out "$OUT/fetch.json" --keep-zst
+      - name: Pre-check
+        timeout-minutes: 60
+        run: python "$PF2/grh.py" precheck --tool "dotnet $PF0_WORK/precheck/Pf2Precheck.dll" --dest "$PF0_WORK/grh" --what challenge,compact,readable --out "$OUT/precheck.json"
+      - name: Pre-check of PF-1's crafted inputs
+        timeout-minutes: 30
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          (cd "$PF1" && python crafted.py base --root "$ROOT" --work "$PF0_WORK/crafted" && python crafted.py gen --base "$PF0_WORK/crafted/base.ndjson" --dir "$PF0_WORK/crafted/gen")
+          python "$PF2/grh.py" precheck-dir --tool "dotnet $PF0_WORK/precheck/Pf2Precheck.dll" --dir "$PF0_WORK/crafted/gen" --theorems pf1_true,pf1_other,pf1_slow --out "$OUT/precheck-crafted.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-precheck
+          path: results-precheck
+          retention-days: 14
+
+  # 2. Every kernel alone on each edition, in a 13 GiB scope. The "others" job runs con-leche
+  #    first: with the comparator job of the same edition it is the parallel case of question 4.
+  kernels:
+    name: kernels ${{ matrix.edition }} ${{ matrix.group }}
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [compact, readable]
+        group: [lean, others]
+        include:
+          - { group: lean, steps: "leanchecker", cap: 170 }
+          - { group: others, edition: compact, steps: "con-leche,con-ron,nanoda-4,nanoda-1", cap: 60 }
+          - { group: others, edition: readable, steps: "con-leche,con-ron,nanoda-4", cap: 60 }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-kernels-${{ matrix.edition }}-${{ matrix.group }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          date +%s > job-start.txt
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          mv job-start.txt "$OUT/"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Fetch the export
+        timeout-minutes: 90
+        run: python "$PF2/grh.py" fetch --what ${{ matrix.edition }} --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Kernels
+        timeout-minutes: 300
+        run: python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/${{ matrix.edition }}-solution.ndjson" --steps "${{ matrix.steps }}" --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min ${{ matrix.cap }} --budget-min 280 --stack-unlimited --label "${{ matrix.edition }}-${{ matrix.group }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-kernels-${{ matrix.edition }}-${{ matrix.group }}
+          path: results-kernels-${{ matrix.edition }}-${{ matrix.group }}
+          retention-days: 14
+
+  # 3. lake comparator with the challenge export (statement check + Lean's kernel), and on the
+  #    compact edition the same followed by the second kernel on one runner (the sequential case).
+  comparator:
+    name: comparator ${{ matrix.edition }} ${{ matrix.mode }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { edition: compact, mode: alone, steps: "comparator" }
+          - { edition: readable, mode: alone, steps: "comparator" }
+          - { edition: compact, mode: sequential, steps: "comparator,con-leche" }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-comparator-${{ matrix.edition }}-${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          date +%s > job-start.txt
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          mv job-start.txt "$OUT/"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Fetch the exports
+        timeout-minutes: 90
+        run: python "$PF2/grh.py" fetch --what challenge,${{ matrix.edition }} --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Comparator
+        timeout-minutes: 300
+        run: python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/${{ matrix.edition }}-solution.ndjson" --challenge "$PF0_WORK/grh/challenge.ndjson" --steps "${{ matrix.steps }}" --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 170 --budget-min 280 --stack-unlimited --label "${{ matrix.edition }}-${{ matrix.mode }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-comparator-${{ matrix.edition }}-${{ matrix.mode }}
+          path: results-comparator-${{ matrix.edition }}-${{ matrix.mode }}
+          retention-days: 14
+
+  # 3b. The independent statement comparisons, built from the commits the MIT report pins
+  #     (the kernels bundled with Lean 4.36.0 have no --compare).
+  compare:
+    name: independent statement comparisons
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-compare
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          date +%s > job-start.txt
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          mv job-start.txt "$OUT/"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Build con-ron --compare
+        timeout-minutes: 60
+        run: |
+          CONRON_REPO=$(python "$PF2/grh.py" pin CONRON_REPO); CONRON_COMPARE_COMMIT=$(python "$PF2/grh.py" pin CONRON_COMPARE_COMMIT)
+          git init -q "$PF0_WORK/con-ron" && git -C "$PF0_WORK/con-ron" fetch -q --depth 1 "$CONRON_REPO" "$CONRON_COMPARE_COMMIT" && git -C "$PF0_WORK/con-ron" checkout -q FETCH_HEAD
+          start=$(date +%s)
+          (cd "$PF0_WORK/con-ron" && cargo build --release --locked -p con-ron 2>&1 | tail -5)
+          echo "{\"build_s\": $(( $(date +%s) - start )), \"commit\": \"$CONRON_COMPARE_COMMIT\"}" > "$OUT/build-con-ron.json"
+          ls -la "$PF0_WORK/con-ron/target/release/con-ron"
+      - name: Build con-leche --compare
+        timeout-minutes: 240
+        run: |
+          CONLECHE_REPO=$(python "$PF2/grh.py" pin CONLECHE_REPO); CONLECHE_COMPARE_COMMIT=$(python "$PF2/grh.py" pin CONLECHE_COMPARE_COMMIT)
+          git init -q "$PF0_WORK/con-leche" && git -C "$PF0_WORK/con-leche" fetch -q --depth 1 "$CONLECHE_REPO" "$CONLECHE_COMPARE_COMMIT" && git -C "$PF0_WORK/con-leche" checkout -q FETCH_HEAD
+          cat "$PF0_WORK/con-leche/lean-toolchain"
+          start=$(date +%s)
+          (cd "$PF0_WORK/con-leche" && PATH="$PIN_ROOT/bin:$PATH" lake build con-leche 2>&1 | tail -15)
+          echo "{\"build_s\": $(( $(date +%s) - start )), \"commit\": \"$CONLECHE_COMPARE_COMMIT\"}" > "$OUT/build-con-leche.json"
+          ls -la "$PF0_WORK/con-leche/.lake/build/bin/con-leche"
+      - name: Fetch the exports
+        timeout-minutes: 90
+        run: python "$PF2/grh.py" fetch --what challenge,compact,readable --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Comparisons
+        timeout-minutes: 240
+        run: |
+          for edition in compact readable; do
+            python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/$edition-solution.ndjson" --challenge "$PF0_WORK/grh/challenge.ndjson" --steps ron-compare,leche-compare --out "$OUT/run-$edition.json" --memory-gib "$CAP_GIB" --cap-min 60 --stack-unlimited --ron-compare "$PF0_WORK/con-ron/target/release/con-ron" --leche-compare "$PF0_WORK/con-leche/.lake/build/bin/con-leche" --label "$edition-compare"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-compare
+          path: results-compare
+          retention-days: 14
+
+  # 4. Doctored copies of the compact export: the standalone kernel accepts some, comparator
+  #    refuses every one (the comparator path is never optional).
+  doctored:
+    name: doctored ${{ matrix.variants }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variants: "true-primitive", steps: "comparator,con-leche,leanchecker" }
+          - { variants: "hints-rh,removed,truncated", steps: "comparator,con-leche" }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-doctored-${{ strategy.job-index }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Machine
+        run: |
+          date +%s > job-start.txt
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          mv job-start.txt "$OUT/"
+      - name: Toolchain and pre-check tool
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          dotnet publish "$PF2/precheck/Pf2Precheck.csproj" -c Release -o "$PF0_WORK/precheck" -nologo -v q
+      - name: Fetch the exports
+        timeout-minutes: 90
+        run: python "$PF2/grh.py" fetch --what challenge,compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Doctor, pre-check, judge
+        timeout-minutes: 320
+        run: |
+          GRH_LEAN=$(python "$PF2/grh.py" pin GRH_LEAN); GRH_THEOREMS=$(python "$PF2/grh.py" pin GRH_THEOREMS)
+          for variant in $(echo "${{ matrix.variants }}" | tr , ' '); do
+            copy="$PF0_WORK/grh/doctored-$variant.ndjson"
+            python "$PF2/grh.py" doctor --source "$PF0_WORK/grh/compact-solution.ndjson" --variant "$variant" --target "$copy" --out "$OUT/doctor-$variant.json"
+            dotnet "$PF0_WORK/precheck/Pf2Precheck.dll" "$copy" --lean-version "$GRH_LEAN" --theorems "$GRH_THEOREMS" > "$OUT/precheck-$variant.json" || true
+            cat "$OUT/precheck-$variant.json"
+            python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$copy" --challenge "$PF0_WORK/grh/challenge.ndjson" --steps "${{ matrix.steps }}" --out "$OUT/run-$variant.json" --memory-gib "$CAP_GIB" --cap-min 170 --stack-unlimited --label "doctored-$variant"
+            rm -f "$copy"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-doctored-${{ strategy.job-index }}
+          path: results-doctored-${{ strategy.job-index }}
+          retention-days: 14
