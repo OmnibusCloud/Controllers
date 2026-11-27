@@ -1,0 +1,76 @@
+name: AI Proof PF-1 whole Mathlib
+run-name: "AI Proof PF-1 whole Mathlib: ${{ github.ref_name }}"
+
+# PF-1 of the Proof controller (a spike): the export of all of Mathlib at the profile's revision
+# (the largest closure a project on it can carry) made on a hosted runner, replayed by the pinned
+# kernels, and cut across processes by the fast driver's slicer. Nothing is published.
+# A run starts when pf1/run/whole.txt changes; a newer run waits for the older one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf1
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf1/run/whole.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf1-whole-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  whole:
+    name: whole Mathlib, ${{ matrix.part }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { part: kernels, steps: "leanchecker,nanoda-4,con-ron,con-leche" }
+          - { part: split, steps: "driver-profile,driver-slices" }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-whole-${{ matrix.part }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h / /mnt || true
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain and driver
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          python "$PF1/lean.py" driver --root "$ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+      - name: Export all of Mathlib
+        timeout-minutes: 120
+        run: python "$PF1/whole.py" --root "$PIN_ROOT" --work "$PF0_WORK/whole" --out "$OUT"
+      - name: Replay
+        timeout-minutes: 300
+        run: |
+          python "$PF1/replay.py" --root "$PIN_ROOT" --export "$PF0_WORK/whole/mathlib.ndjson" --steps "${{ matrix.steps }}" --driver "$DRIVER" --slices 4 --out "$OUT/replay.json" --cap-min 100 --budget-min 270 --label "mathlib-${{ matrix.part }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-whole-${{ matrix.part }}
+          path: results-whole-${{ matrix.part }}
+          retention-days: 14
