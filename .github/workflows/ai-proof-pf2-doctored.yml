@@ -1,0 +1,75 @@
+name: AI Proof PF-2 doctored copies, a standalone kernel
+run-name: "AI Proof PF-2 doctored copies, a standalone kernel: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike): each doctored copy of the compact RH/GRH export judged by
+# a standalone kernel that fits the 16 GB tier (nanoda with comparator's configuration, in a 13 GiB
+# scope); the RH run's con-leche was stopped by the scope at this size. Nothing is published.
+# A run starts when pf2/run/doctored.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/doctored.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf2-doctored-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+  PF1_CGROUP: "1"
+  CAP_GIB: 13
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kernel:
+    name: ${{ matrix.variant }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [hints-rh, true-primitive, removed, truncated]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      OUT: results-doctored-kernel-${{ matrix.variant }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Fetch the export
+        timeout-minutes: 60
+        run: python "$PF2/grh.py" fetch --what compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Doctor and judge
+        timeout-minutes: 90
+        run: |
+          copy="$PF0_WORK/grh/doctored-${{ matrix.variant }}.ndjson"
+          python "$PF2/grh.py" doctor --source "$PF0_WORK/grh/compact-solution.ndjson" --variant "${{ matrix.variant }}" --target "$copy" --out "$OUT/doctor.json"
+          rm -f "$PF0_WORK/grh/compact-solution.ndjson"
+          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$copy" --steps nanoda-4 --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 60 --stack-unlimited --label "doctored-${{ matrix.variant }}-nanoda"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-doctored-kernel-${{ matrix.variant }}
+          path: results-doctored-kernel-${{ matrix.variant }}
+          retention-days: 14

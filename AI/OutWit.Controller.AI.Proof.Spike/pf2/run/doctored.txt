@@ -1,0 +1,1 @@
+doctored: run 1 (2026-11-27): each doctored copy of the compact export judged by nanoda alone in a 13 GiB scope
