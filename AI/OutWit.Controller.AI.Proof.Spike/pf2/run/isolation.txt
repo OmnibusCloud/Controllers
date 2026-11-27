@@ -1,1 +1,1 @@
-isolation: run 5 (2026-11-27): on macOS the comparator may run which and env, the network probed with nc as well (curl fails on its TLS configuration first)
+isolation: run 6 (2026-11-27): our own which for lake comparator in the Windows AppContainer (MSYS which cannot start there); what which sees under sandbox-exec

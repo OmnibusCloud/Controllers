@@ -111,7 +111,7 @@ def wrap(mode: str, cmd: list, root: str, job: str, probe: bool = False) -> list
 
 
 def windows_run(sandbox: str, mode: str, cmd: list, root: str, job: str, cap_min: float, memory_gib: float,
-                children: bool) -> dict:
+                children: bool, which_dir: str = "") -> dict:
     argv = [sandbox, "run", "--job-dir", job, "--grant-read", root, "--wall-s", str(int(cap_min * 60)),
             "--processes", "8", "--env", "LEAN_ABORT_ON_PANIC=1"]
     if memory_gib:
@@ -126,8 +126,13 @@ def windows_run(sandbox: str, mode: str, cmd: list, root: str, job: str, cap_min
         # `lake comparator` will not start without `which`, `git` and `env` (it runs `which git` and
         # `which env`), even when it judges two exports and builds nothing: on Windows those are
         # Git for Windows' programs, and their folders go on the sandbox's PATH.
-        found = [shutil.which(name) for name in ("which", "git", "env")]
-        folders = []
+        # Git for Windows' `which.exe` is an MSYS program and cannot start in an AppContainer: our own
+        # `which` (pf2/isolation/which) goes first on PATH when there is one, its folder granted.
+        found = [shutil.which(name) for name in ("git", "env")] if which_dir else \
+            [shutil.which(name) for name in ("which", "git", "env")]
+        folders = [which_dir] if which_dir else []
+        if which_dir:
+            argv += ["--grant-read", which_dir]
         for exe in found:
             if exe and os.path.dirname(exe) not in folders:
                 folders.append(os.path.dirname(exe))
@@ -163,7 +168,7 @@ def kernels(options) -> int:
             print("---", key, flush=True)
             if options.mode.startswith("job") or options.mode.startswith("appcontainer"):
                 row = windows_run(options.sandbox, options.mode, cmd, root, job, options.cap_min, options.memory_gib,
-                                  children=kernel == "comparator")
+                                  children=kernel == "comparator", which_dir=options.which_dir)
                 summary = {k: row.get(k) for k in ("ending", "exit_code", "wall_seconds", "peak_job_memory", "grant_seconds")}
             else:
                 row = run_tree(wrap(options.mode, cmd, root, job), env=env, cwd=job, timeout=options.cap_min * 60,
@@ -262,6 +267,7 @@ def main() -> int:
     p.add_argument("--kernels", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--sandbox", default="")
+    p.add_argument("--which-dir", default="", help="Windows: a folder with our own which.exe for lake comparator")
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--memory-gib", type=float, default=0)
     p.add_argument("--cap-min", type=float, default=30)

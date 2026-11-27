@@ -77,7 +77,9 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: |
           dotnet publish "$PF2/isolation/appcontainer/Pf2Sandbox.csproj" -c Release -o "$PF0_WORK/sandbox" -nologo -v q
+          dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -o "$PF0_WORK/which" -nologo -v q
           echo "SANDBOX=$PF0_WORK/sandbox/Pf2Sandbox.exe" >> "$GITHUB_ENV"
+          echo "WHICH_DIR=$PF0_WORK/which" >> "$GITHUB_ENV"
           { netsh advfirewall show allprofiles state; sc query mpssvc; sc query bfe; } > "$OUT/firewall.txt" 2>&1 || true
           cat "$OUT/firewall.txt"
       - name: Kit R1 (PF-1's export and challenge)
@@ -129,8 +131,30 @@ jobs:
         run: |
           THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
           for mode in $(echo "${{ matrix.modes }}" | tr , ' '); do
-            python "$PF2/isolation/isolation.py" kernels --mode "$mode" --root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels nanoda-4,leanchecker,comparator --repeat 2 --out "$OUT/kernels.json" --sandbox "${SANDBOX:-}" --memory-gib 6 --cap-min 30
+            python "$PF2/isolation/isolation.py" kernels --mode "$mode" --root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels nanoda-4,leanchecker,comparator --repeat 2 --out "$OUT/kernels.json" --sandbox "${SANDBOX:-}" --which-dir "${WHICH_DIR:-}" --memory-gib 6 --cap-min 30
           done
+      # Run 5: under sandbox-exec the comparator still found no git; what `which` sees there.
+      - name: sandbox-exec and the comparator's `which`
+        if: ${{ runner.os == 'macOS' }}
+        continue-on-error: true
+        run: |
+          python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, os.path.join(os.environ["PF2"], "isolation"))
+          sys.path.insert(0, os.environ["PF2"])
+          import isolation
+          root = os.path.realpath(os.environ["PIN_ROOT"])
+          job = os.path.realpath(os.path.join(os.environ["PF0_WORK"], "job"))
+          open(os.path.join(job, "diag.sb"), "w").write(isolation.macos_profile(root, job, False, "strict", tools=True))
+          EOF
+          { echo "PATH=$PATH"; command -v git; ls -la /usr/bin/which "$(command -v git)"; file /usr/bin/which; } > "$OUT/which-diag.txt" 2>&1
+          for name in git env; do
+            echo "--- which $name" >> "$OUT/which-diag.txt"
+            sandbox-exec -f "$PF0_WORK/job/diag.sb" /usr/bin/which "$name" >> "$OUT/which-diag.txt" 2>&1; echo "exit $?" >> "$OUT/which-diag.txt"
+          done
+          sleep 2
+          log show --last 2m --style compact --predicate 'sender == "Sandbox" OR eventMessage CONTAINS "deny("' 2>/dev/null | grep -i deny | tail -40 >> "$OUT/which-diag.txt" || true
+          cat "$OUT/which-diag.txt"
       - name: A memory cap below what the kernel needs
         timeout-minutes: 30
         run: |

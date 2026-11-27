@@ -1,0 +1,82 @@
+name: AI Proof PF-2 kernels as separate verifications
+run-name: "AI Proof PF-2 kernels as separate verifications: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), question 4: the comparator run (the statement check and
+# Lean's kernel) and the second kernel (nanoda, the one besides Lean's that fits the 16 GB tier on
+# the compact RH/GRH export) on one runner one after the other, against each on a runner of its
+# own at the same time; wall time from the job's start to a complete result. Three jobs start
+# together. Nothing is published. A run starts when pf2/run/schedule.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/schedule.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf2-schedule-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+  PF1_CGROUP: "1"
+  CAP_GIB: 13
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run:
+    name: ${{ matrix.mode }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mode: sequential, what: "challenge,compact", steps: "comparator,nanoda-4" }
+          - { mode: parallel-comparator, what: "challenge,compact", steps: "comparator" }
+          - { mode: parallel-kernel, what: "compact", steps: "nanoda-4" }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      OUT: results-schedule-${{ matrix.mode }}
+    steps:
+      - name: Start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          echo "$JOB_START" > "$OUT/job-start.txt"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+      - name: Fetch
+        timeout-minutes: 60
+        run: python "$PF2/grh.py" fetch --what ${{ matrix.what }} --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Judge
+        timeout-minutes: 180
+        run: |
+          CH=""
+          if [ -f "$PF0_WORK/grh/challenge.ndjson" ]; then CH="--challenge $PF0_WORK/grh/challenge.ndjson"; fi
+          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" $CH --steps "${{ matrix.steps }}" --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 150 --stack-unlimited --label "${{ matrix.mode }}"
+          echo "$(date +%s)" > "$OUT/job-end.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-schedule-${{ matrix.mode }}
+          path: results-schedule-${{ matrix.mode }}
+          retention-days: 14
