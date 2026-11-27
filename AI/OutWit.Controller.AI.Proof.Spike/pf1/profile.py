@@ -71,7 +71,8 @@ def lake_env_path(root: str, source: str, env: dict) -> list:
         value = json.loads(row["stdout"].strip().splitlines()[-1])
     except (ValueError, IndexError):
         return []
-    return [p for p in value.split(os.pathsep) if p]
+    # Older Lake versions report the paths relative to the checkout.
+    return [os.path.normpath(os.path.join(source, p)) for p in value.split(os.pathsep) if p]
 
 
 def manifest_files(source: str, lean_path: list, out_path: str) -> dict:
