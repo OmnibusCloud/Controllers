@@ -34,7 +34,7 @@ from common import comparator_command, comparator_config, kernel_command, lean_e
 STANDARD_AXIOMS = ["propext", "Quot.sound", "Classical.choice"]
 
 
-def macos_profile(root: str, job: str, probe: bool, variant: str = "strict") -> str:
+def macos_profile(root: str, job: str, probe: bool, variant: str = "strict", tools: bool = False) -> str:
     """sandbox-exec profiles (SBPL; a later rule wins over an earlier one).
 
     strict:   deny by default; read the toolchain and the system's libraries, map them executable,
@@ -44,6 +44,9 @@ def macos_profile(root: str, job: str, probe: bool, variant: str = "strict") -> 
     denylist: allow by default; deny the network, reading the users' and volumes' folders, and
               writing anywhere but the job folder (weaker: what is not named is allowed)."""
     bins = ' (subpath "/bin") (subpath "/usr/bin")' if probe else ""
+    if tools and not probe:
+        # `lake comparator` runs `which git` and `which env` before it judges anything.
+        bins = ' (literal "/usr/bin/which") (literal "/usr/bin/env") (literal "/bin/sh") (literal "/bin/bash")'
     execs = f'(subpath "{root}")' + bins
     if variant == "denylist":
         return f"""(version 1)
@@ -97,10 +100,12 @@ def wrap(mode: str, cmd: list, root: str, job: str, probe: bool = False) -> list
         return ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
                 "--bind", job, job, "--unshare-all", "--die-with-parent", "--chdir", job, "--"] + cmd
     if mode == "sandbox-exec":
-        profile = os.path.join(job, ("pf2-probe-" if probe else "pf2-kernel-") + os.environ.get("PF2_SB_VARIANT", "strict") + ".sb")
+        profile = os.path.join(job, ("pf2-probe-" if probe else "pf2-kernel-") + os.environ.get("PF2_SB_VARIANT", "strict")
+                               + ("-tools" if os.path.basename(cmd[0]).startswith("lake") else "") + ".sb")
         with open(profile, "w", encoding="utf-8") as handle:
             handle.write(macos_profile(os.path.realpath(root), os.path.realpath(job), probe,
-                                       os.environ.get("PF2_SB_VARIANT", "strict")))
+                                       os.environ.get("PF2_SB_VARIANT", "strict"),
+                                       tools=os.path.basename(cmd[0]).startswith("lake")))
         return ["sandbox-exec", "-f", profile] + cmd
     raise ValueError(mode)
 
@@ -217,6 +222,11 @@ def probe(options) -> int:
         "connect-name": [curl, "-sS", "-m", "10", "-o", "/dev/null", "https://example.com/"],
         "connect-loopback": [curl, "-sS", "-m", "5", "-o", "/dev/null", f"http://127.0.0.1:{port}/"],
     }
+    nc = shutil.which("nc")
+    if nc:
+        # A TCP connection without TLS: on macOS curl fails on its LibreSSL configuration first.
+        cases["connect-address-nc"] = [nc, "-z", "-w", "5", "1.1.1.1", "80"]
+        cases["connect-loopback-nc"] = [nc, "-z", "-w", "5", "127.0.0.1", str(port)]
     record = {"mode": options.mode, "variant": os.environ.get("PF2_SB_VARIANT", "")}
     for name, cmd in cases.items():
         written = os.path.join(outside, "written.txt")

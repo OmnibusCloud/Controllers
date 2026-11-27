@@ -1,1 +1,1 @@
-isolation: run 4 (2026-11-27): sandbox-exec profiles in three variants with the sandbox's denials logged; which, git and env reachable for lake comparator inside the sandboxes
+isolation: run 5 (2026-11-27): on macOS the comparator may run which and env, the network probed with nc as well (curl fails on its TLS configuration first)
