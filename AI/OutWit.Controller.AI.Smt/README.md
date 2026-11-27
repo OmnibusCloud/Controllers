@@ -5,7 +5,7 @@ runs as a WebAssembly module inside the controller's own wasm sandbox, under bud
 counts and not clocks, so the same problem gives the same verdict, the same model and the same
 cost on every machine.
 
-**Status: 1.0.0, the first release: on GitHub Packages and the test server, not on nuget.org.**
+**Status: 1.0.0, the first release, on nuget.org.**
 This version holds the solver (the profile, the sandbox, one session per problem), the node's
 side of a run (packages of problems
 solved on machines of 8 GB at least, the packages of a node's share on one budget of sessions,

@@ -5,7 +5,7 @@ Content-only NuGet package that ships the bundled `.wit` job scripts of the
 texts and a consumer-side MSBuild `.targets` file that stages them into `$(OutputPath)@Scripts/`,
 the layout the runtime reads at start-up.
 
-**Status: 1.0.0, the first release: on GitHub Packages and the test server, not on nuget.org.**
+**Status: 1.0.1, on nuget.org: the scripts of 1.0.0, unchanged, with the compatibility marker.**
 
 ## Contents
 
@@ -46,8 +46,9 @@ sends. What the documents say and what a lab can rely on is the controller's
 ## Compatibility
 
 The scripts call the activities the controller has since 0.4.0, and `Smt.Forget`, which it has
-since 1.0.0. The package's compatibility
-marker (a reference to the controller with a half-open range, as the repository's decision record
-on scripts and controller versions has it) is written in the project and commented out while no
-controller is on nuget.org; it waits for the first public release, `[1.0.0, 2.0.0)`, and a test
-of the controller's tests holds the range to that release.
+since 1.0.0. The package depends on the controller, `OutWit.Controller.AI.Smt` `[1.0.0, 2.0.0)`:
+that is its compatibility marker (a half-open range, as the repository's decision record on
+scripts and controller versions has it), from 1.0.0, the controller's first release and the first
+on nuget.org, to the next major, exclusive. A test of the controller's tests holds the range.
+1.0.1 is the first version of the package with the marker; its scripts are the ones of 1.0.0,
+unchanged.
