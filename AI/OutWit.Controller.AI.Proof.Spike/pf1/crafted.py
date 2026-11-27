@@ -358,6 +358,8 @@ def ending(row: dict) -> str:
     code = row.get("exit")
     if code is None:
         return "did not start"
+    if row.get("cap") == "cgroup" and code != 0 and (row.get("wall_s") or 0) >= (row.get("cap_s") or 1e9) - 1:
+        return "cap: time"
     if code == 0:
         return "accepted"
     if not IS_WINDOWS and code < 0:

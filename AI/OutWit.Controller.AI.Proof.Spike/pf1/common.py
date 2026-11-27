@@ -193,10 +193,17 @@ def capped(cmd: list, env: dict | None = None, cwd: str | None = None, timeout: 
     the resident set is seen above it (sampled every 0.1 s)."""
     cap_bytes = int(memory_gib * (1 << 30)) if memory_gib else None
     how = None
+    unit = None
     if cap_bytes and IS_LINUX and shutil.which("systemd-run") and os.environ.get("PF1_CGROUP") == "1":
         uid, gid = os.getuid(), os.getgid()
-        wrapper = ["sudo", "-n", "systemd-run", "--quiet", "--scope", "-p", f"MemoryMax={cap_bytes}",
-                   "-p", "MemorySwapMax=0", f"--uid={uid}", f"--gid={gid}", "--setenv=HOME=" + os.environ.get("HOME", "/tmp")]
+        global _UNITS
+        _UNITS += 1
+        unit = f"pf1-cap-{os.getpid()}-{_UNITS}"
+        # The scope holds the process and everything it starts: systemd ends all of it at the wall
+        # cap, and the kernel's memory controller at the memory cap (killing sudo alone would not).
+        wrapper = ["sudo", "-n", "systemd-run", "--quiet", "--scope", f"--unit={unit}", "-p", f"MemoryMax={cap_bytes}",
+                   "-p", "MemorySwapMax=0", "-p", f"RuntimeMaxSec={int(timeout)}",
+                   f"--uid={uid}", f"--gid={gid}", "--setenv=HOME=" + os.environ.get("HOME", "/tmp")]
         if env:
             for key in ("PATH", "LEAN_PATH", "LEAN_ABORT_ON_PANIC"):
                 if key in env:
@@ -207,11 +214,14 @@ def capped(cmd: list, env: dict | None = None, cwd: str | None = None, timeout: 
     else:
         cap_for_sampling = cap_bytes
         how = "sampled" if cap_bytes else None
-    row = run_measured(cmd, env=env, cwd=cwd, timeout=timeout, memory_cap=cap_for_sampling,
+    row = run_measured(cmd, env=env, cwd=cwd, timeout=timeout + (15 if unit else 0), memory_cap=cap_for_sampling,
                        stdout_path=stdout_path, keep=keep)
+    if unit:
+        subprocess.run(["sudo", "-n", "systemctl", "kill", "--signal=KILL", unit + ".scope"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     out = {"exit": row.get("exit"), "wall_s": row.get("wall_s"), "user_s": row.get("user_s"),
            "sys_s": row.get("sys_s"), "peak_rss": row.get("peak_rss"), "peak_private": row.get("peak_private"),
-           "killed": row.get("killed"), "cap": how, "cap_gib": memory_gib}
+           "killed": row.get("killed"), "cap": how, "cap_gib": memory_gib, "cap_s": timeout}
     text = ((row.get("stdout") or "") + "\n" + (row.get("stderr") or "")).strip()
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     out["says"] = " / ".join(lines[-6:])[-600:]
@@ -227,6 +237,9 @@ def capped(cmd: list, env: dict | None = None, cwd: str | None = None, timeout: 
     if row.get("error"):
         out["error"] = row["error"]
     return out
+
+
+_UNITS = 0
 
 
 def nanoda_config(folder: str, export_path: str, axioms: list | None = None, threads: int = 4) -> str:

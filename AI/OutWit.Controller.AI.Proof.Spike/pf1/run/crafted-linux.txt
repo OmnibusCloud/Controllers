@@ -1,0 +1,1 @@
+crafted-linux: run 1 (2026-11-27): the capped run's whole scope ends at its cap

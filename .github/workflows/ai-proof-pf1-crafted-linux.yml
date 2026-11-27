@@ -1,0 +1,81 @@
+name: AI Proof PF-1 crafted exports on Linux
+run-name: "AI Proof PF-1 crafted exports on Linux: ${{ github.ref_name }}"
+
+# PF-1 of the Proof controller (a spike): untrusted exports fed to every reader and kernel of the
+# pinned toolchain and to the fast driver, under a wall cap and a memory cap; on Linux the kernels
+# also inside comparator's bubblewrap sandbox and the cap is a cgroup limit. The inputs are made on
+# the runner and stay there; the record says how each program ended.
+# The Linux job alone (each capped run in a systemd scope that ends with it); a run starts when pf1/run/crafted-linux.txt changes; a newer run waits for the older one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf1
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf1/run/crafted-linux.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf1-crafted-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  crafted:
+    name: crafted on ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04, programs: "leanchecker,leanchecker-paranoid,nanoda-4,con-ron,con-leche,lean4lean,comparator,comparator-nanoda,driver", flags: "--sandbox", cgroup: "1" }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
+    env:
+      OUT: results-crafted-${{ matrix.rid }}
+      PF1_CGROUP: ${{ matrix.cgroup }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain and driver
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid "${{ matrix.rid }}" --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          python "$PF1/lean.py" driver --root "$ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+      - name: bubblewrap and cgroups (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -q bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-all /usr/bin/true && echo "bwrap starts"
+          sudo -n systemd-run --quiet --scope -p MemoryMax=1G -p MemorySwapMax=0 --uid=$(id -u) --gid=$(id -g) -- /usr/bin/true && echo "systemd-run scope works"
+      - name: Base and crafted inputs
+        run: |
+          python "$PF1/crafted.py" base --root "$PIN_ROOT" --work "$PF0_WORK/crafted"
+          python "$PF1/crafted.py" gen --base "$PF0_WORK/crafted/base.ndjson" --dir "$PF0_WORK/crafted/gen"
+          cp "$PF0_WORK/crafted/gen/crafted.json" "$OUT/inputs.json"
+      - name: Every program on every input
+        timeout-minutes: 270
+        run: python "$PF1/crafted.py" run --root "$PIN_ROOT" --dir "$PF0_WORK/crafted/gen" --out "$OUT/crafted.json" --driver "$DRIVER" --programs "${{ matrix.programs }}" --cap-s 60 --memory-gib 4 ${{ matrix.flags }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-crafted-${{ matrix.rid }}
+          path: results-crafted-${{ matrix.rid }}
+          retention-days: 14
