@@ -1,1 +1,1 @@
-crafted: run 1 (2026-11-27)
+crafted: run 2 (2026-11-27): canonical inputs (a reader that requires them meets the defect, not a duplicate), more sizes, comparator with nanoda

@@ -30,7 +30,7 @@ def pf1Str : String := "pf1"
 """
 BASE_THEOREMS = ["pf1_true", "pf1_other", "pf1_slow"]
 PROGRAMS = ["leanchecker", "leanchecker-paranoid", "nanoda-4", "con-ron", "con-leche", "lean4lean",
-            "comparator", "driver"]
+            "comparator", "comparator-nanoda", "driver"]
 
 
 def base(options: argparse.Namespace) -> int:
@@ -86,24 +86,32 @@ class Builder:
                 if kind in ("def", "thm", "axiom", "opaque"):
                     self.decl_lines[self.names[obj[kind]["name"]]] = index
         self.extra: list = []
+        self.seen: dict = {}
+        for line in self.lines[1:]:
+            obj = json.loads(line)
+            for key in ("ie", "il", "in"):
+                if key in obj:
+                    body = {k: v for k, v in obj.items() if k != key}
+                    self.seen[(key, json.dumps(body, sort_keys=True))] = obj[key]
+
+    def _add(self, key: str, body: dict, counter: str, canonical: bool = True) -> int:
+        token = (key, json.dumps(body, sort_keys=True))
+        if canonical and token in self.seen:
+            return self.seen[token]
+        idx = getattr(self, counter)
+        setattr(self, counter, idx + 1)
+        self.extra.append({key: idx, **body})
+        self.seen[token] = idx
+        return idx
 
     def name(self, text: str) -> int:
-        idx = self.name_count
-        self.name_count += 1
-        self.extra.append({"in": idx, "str": {"pre": 0, "str": text}})
-        return idx
+        return self._add("in", {"str": {"pre": 0, "str": text}}, "name_count")
 
-    def expr(self, body: dict) -> int:
-        idx = self.expr_count
-        self.expr_count += 1
-        self.extra.append({"ie": idx, **body})
-        return idx
+    def expr(self, body: dict, canonical: bool = True) -> int:
+        return self._add("ie", body, "expr_count", canonical)
 
     def level(self, body: dict) -> int:
-        idx = self.level_count
-        self.level_count += 1
-        self.extra.append({"il": idx, **body})
-        return idx
+        return self._add("il", body, "level_count")
 
     def definition(self, name: str, type_idx: int, value_idx: int) -> int:
         n = self.name(name)
@@ -194,7 +202,7 @@ def gen(options: argparse.Namespace) -> int:
         lines[0] = json.dumps(meta, separators=(",", ":"), sort_keys=True)
         put(f"meta-{version}", b, lines, f"the meta line says format {version}")
 
-    for digits in (100_000, 10_000_000):
+    for digits in (100_000, 1_000_000, 10_000_000):
         b = fresh()
         lit = b.expr({"natVal": "7" * digits})
         b.definition("pf1_big", b.const_expr["Nat"], lit)
@@ -225,23 +233,27 @@ def gen(options: argparse.Namespace) -> int:
 
     b = fresh()
     cur = 0
+    below = 0
     depth = 100_000
     for _ in range(depth):
+        below = cur
         cur = b.level({"succ": cur})
     sort_hi = b.expr({"sort": cur})
-    sort_lo = b.expr({"sort": cur - 1 if cur > 1 else 0})
+    sort_lo = b.expr({"sort": below})
     b.definition("pf1_level", sort_hi, sort_lo)
     put("deep-level", b, what=f"a universe level nested {depth} deep")
 
     # A term whose tree is exponentially larger than its graph: b(k+1) = Nat.add b(k) b(k).
-    for label, twice, wrong in (("shared-bomb", True, False), ("shared-bomb-error", False, True)):
+    for label, twice, wrong in (("shared-bomb", False, False), ("shared-bomb-error", False, True),
+                                ("duplicate-entries", True, False)):
         b = fresh()
         add, zero = b.const_expr["Nat.add"], b.const_expr["Nat.zero"]
 
-        def bomb(levels: int) -> int:
+        def bomb(levels: int, canonical: bool = True) -> int:
             cur = zero
             for _ in range(levels):
-                cur = b.expr({"app": {"fn": b.expr({"app": {"fn": add, "arg": cur}}), "arg": cur}})
+                cur = b.expr({"app": {"fn": b.expr({"app": {"fn": add, "arg": cur}}, canonical), "arg": cur}},
+                             canonical)
             return cur
 
         first = bomb(200)
@@ -250,7 +262,7 @@ def gen(options: argparse.Namespace) -> int:
             b.definition("pf1_bomb", b.const_expr["String"], first)
         else:
             first_name = b.definition("pf1_bomb", b.const_expr["Nat"], first)
-            second = bomb(200)
+            second = bomb(200, canonical=not twice)
             second_name = b.definition("pf1_bomb2", b.const_expr["Nat"], second)
         if twice:
             # pf1_bomb = pf1_bomb2 by Eq.refl: the kernel must see two separately built copies agree.
@@ -267,7 +279,9 @@ def gen(options: argparse.Namespace) -> int:
             val = b.expr({"app": {"fn": b.expr({"app": {"fn": refl_c, "arg": nat}}), "arg": c1}})
             b.theorem("pf1_bomb_eq", ty, val)
         put(label, b, what="a term of 2^200 nodes as a tree, 400 as a graph" +
-            (", declared of the wrong type" if wrong else ", built twice"))
+            (", declared of the wrong type" if wrong else
+             ", built twice: the second copy repeats entries the export already has" if twice else
+             ", and a theorem that it equals itself under another name"))
 
     b = fresh()
     index, idx = b.nat_lits["377"]
@@ -285,10 +299,11 @@ def gen(options: argparse.Namespace) -> int:
     lines[b.decl_lines["pf1_other"]] = json.dumps(other_line, separators=(",", ":"), sort_keys=True)
     put("false-theorem", b, lines, "a theorem with another theorem's proof (3 + 3 = 6 by the proof of 2 + 2 = 4)")
 
-    b = fresh()
-    s = b.expr({"strVal": "x" * (64 << 20)})
-    b.definition("pf1_long", b.const_expr["String"], s)
-    put("long-string", b, what="a string literal of 64 MiB on one line")
+    for size, label in ((64 << 20, "long-string"), (1 << 30, "long-string-1g")):
+        b = fresh()
+        s = b.expr({"strVal": "x" * size})
+        b.definition("pf1_long", b.const_expr["String"], s)
+        put(label, b, what=f"a string literal of {size >> 20} MiB on one line")
 
     write_json(os.path.join(folder, "crafted.json"), made)
     for label, entry in made.items():
@@ -305,6 +320,7 @@ def run(options: argparse.Namespace) -> int:
     os.makedirs(work, exist_ok=True)
     env = lean_env(root, [])
     config = comparator_config(os.path.join(work, "comparator.json"), ["pf1_true"])
+    nanoda_config = comparator_config(os.path.join(work, "comparator-nanoda.json"), ["pf1_true"], nanoda=True)
     challenge = os.path.join(folder, "ok.ndjson")
     record = {"programs": programs, "cap_s": options.cap_s, "memory_gib": options.memory_gib, "results": {}}
     labels = [label for label in made if not options.only or label in options.only.split(",")]
@@ -312,8 +328,9 @@ def run(options: argparse.Namespace) -> int:
         path = os.path.join(folder, f"{label}.ndjson")
         rows = {}
         for program in programs:
-            if program == "comparator":
-                cmd = comparator_command(root, config, challenge, path, sandbox=options.sandbox and IS_LINUX)
+            if program in ("comparator", "comparator-nanoda"):
+                which = config if program == "comparator" else nanoda_config
+                cmd = comparator_command(root, which, challenge, path, sandbox=options.sandbox and IS_LINUX)
             elif program == "driver":
                 if not options.driver:
                     continue

@@ -40,9 +40,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { rid: linux-x64, os: ubuntu-24.04, programs: "leanchecker,leanchecker-paranoid,nanoda-4,con-ron,con-leche,lean4lean,comparator,driver", flags: "--sandbox", cgroup: "1" }
-          - { rid: win-x64, os: windows-2022, programs: "leanchecker,nanoda-4,con-ron,con-leche,comparator,driver", flags: "", cgroup: "0" }
-          - { rid: osx-arm64, os: macos-15, programs: "leanchecker,nanoda-4,con-ron,comparator,driver", flags: "", cgroup: "0" }
+          - { rid: linux-x64, os: ubuntu-24.04, programs: "leanchecker,leanchecker-paranoid,nanoda-4,con-ron,con-leche,lean4lean,comparator,comparator-nanoda,driver", flags: "--sandbox", cgroup: "1" }
+          - { rid: win-x64, os: windows-2022, programs: "leanchecker,nanoda-4,con-ron,con-leche,comparator,comparator-nanoda,driver", flags: "", cgroup: "0" }
+          - { rid: osx-arm64, os: macos-15, programs: "leanchecker,nanoda-4,con-ron,comparator,comparator-nanoda,driver", flags: "", cgroup: "0" }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 300
     env:
