@@ -312,8 +312,15 @@ def old(options: argparse.Namespace) -> int:
         row = run_measured([tool(root, "lake"), "exe", "cache", "get"], env=dict(env, **extra), cwd=source, timeout=2700)
         entry = short(row, 25)
         entry["ltar_files"], entry["ltar_bytes"] = (_count(cache, ".ltar"))
-        entry["oleans"] = _count(os.path.join(source, ".lake", "build", "lib", "lean", "Mathlib"), ".olean")[0]
+        # An older tool keeps its files under the home folder whatever MATHLIB_CACHE_DIR says.
+        home_cache = os.path.join(os.path.expanduser("~"), ".cache", "mathlib")
+        entry["ltar_files_home"], entry["ltar_bytes_home"] = (_count(home_cache, ".ltar"))
+        # Older Lake versions put the compiled files under lib/, newer ones under lib/lean/.
+        entry["oleans"] = _count_modules(os.path.join(source, ".lake", "build", "lib"))
         text = (row.get("stdout") or "") + (row.get("stderr") or "")
+        said = re.findall(r"Downloaded: (\d+) file\(s\) \[attempted (\d+)/(\d+)", text)
+        if said:
+            entry["tool_says_downloaded"] = [int(x) for x in said[-1]]
         entry["urls"] = sorted(set(re.findall(r"https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9.\-_]+){0,2}", text)))[:10]
         record[label] = entry
         print("\n".join(entry["tail"]), flush=True)
@@ -347,6 +354,12 @@ def old(options: argparse.Namespace) -> int:
     text, challenge = (OLD_FILE, OLD_CHALLENGE) if with_mathlib else (CORE_FILE, CORE_CHALLENGE)
     record["export_with_mathlib"] = with_mathlib
     exports = {}
+    # The names an export carries for the pinned comparator, as far as this Lean has them.
+    wanted = export_targets(["pf1_old"])
+    header = "import Mathlib.Data.Nat.Prime.Basic" if with_mathlib else "import Lean"
+    present = present_names(root, lean_path, files, header, [n for n in wanted if n != "pf1_old"])
+    record["names_missing_in_this_lean"] = [n for n, ok in present.items() if not ok]
+    targets = ["pf1_old"] + [n for n in wanted if present.get(n)]
     for module, body in (("PF1Old", text), ("PF1OldChallenge", challenge)):
         with open(os.path.join(files, module + ".lean"), "w", encoding="utf-8", newline="\n") as handle:
             handle.write(body)
@@ -355,9 +368,9 @@ def old(options: argparse.Namespace) -> int:
                              timeout=1800)
         record[f"compile_{module}"] = short(built)
         target = os.path.join(files, module + ".ndjson")
-        row = run_measured([exporter, module, "--"] + export_targets(["pf1_old"]), env=fenv, cwd=files, timeout=1800,
-                           stdout_path=target)
+        row = run_measured([exporter, module, "--"] + targets, env=fenv, cwd=files, timeout=1800, stdout_path=target)
         record[f"export_{module}"] = short(row)
+        record[f"export_{module}"]["head"] = ((row.get("stderr") or "") + (row.get("stdout") or "")).strip().splitlines()[:6]
         if row["exit"] == 0:
             record[f"export_{module}"].update(read_export_summary(target))
             exports[module] = target
@@ -388,6 +401,35 @@ def _lean_files(folder: str):
         for name in names:
             if name.endswith(".lean"):
                 yield os.path.join(base, name)
+
+
+def _count_modules(folder: str) -> int:
+    count = 0
+    if os.path.isdir(folder):
+        for base, _dirs, names in os.walk(folder):
+            if "Mathlib" not in base.replace(os.sep, "/").split("/"):
+                continue
+            count += sum(1 for name in names if name.endswith(".olean"))
+    return count
+
+
+def present_names(root: str, lean_path: list, folder: str, header: str, names: list) -> dict:
+    """Which of `names` the environment of that toolchain (and header) has."""
+    lines = [header, "open Lean Elab Command in", "#eval show CommandElabM Unit from do",
+             "  let env ← getEnv"]
+    for name in names:
+        lines.append(f"  IO.println s!\"PF1NAME {name} {{env.contains `{name}}}\"")
+    path = os.path.join(folder, "PF1Probe.lean")
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(lines) + "\n")
+    row = run_measured([tool(root, "lean"), "PF1Probe.lean"], env=lean_env(root, lean_path + [folder]), cwd=folder,
+                       timeout=900)
+    found = {}
+    for line in (row.get("stdout") or "").splitlines():
+        parts = line.strip().split()
+        if len(parts) == 3 and parts[0] == "PF1NAME":
+            found[parts[1]] = parts[2] == "true"
+    return found
 
 
 def _count(folder: str, suffix: str) -> tuple:

@@ -49,6 +49,7 @@ structure Args where
   slices : Nat := 1
   index : Nat := 0
   weights : Option String := none
+  importsFile : Option String := none
   out : Option String := none
 
 def splitNames (s : String) : Array Name :=
@@ -61,6 +62,7 @@ partial def parseArgs (args : List String) (acc : Args) : Except String Args :=
   | "--theorems" :: v :: rest => parseArgs rest { acc with theorems := splitNames v }
   | "--axioms" :: v :: rest => parseArgs rest { acc with axioms := splitNames v }
   | "--import" :: v :: rest => parseArgs rest { acc with imports := splitNames v }
+  | "--imports-file" :: v :: rest => parseArgs rest { acc with importsFile := some v }
   | "--slices" :: v :: rest => parseArgs rest { acc with slices := v.toNat! }
   | "--index" :: v :: rest => parseArgs rest { acc with index := v.toNat! }
   | "--weights" :: v :: rest => parseArgs rest { acc with weights := some v }
@@ -220,7 +222,16 @@ unsafe def runFast (a : Args) : IO UInt32 := do
   let t1 ← IO.monoMsNow
   let challenge? ← a.challenge.mapM parseExport
   let t2 ← IO.monoMsNow
-  let env ← importModules (a.imports.map ({ module := · })) {}
+  -- The trusted environment the project saw: the modules of the revision it imports (one a line),
+  -- not the whole library: a name the project defines may exist in a module it does not import.
+  let imports ← match a.importsFile with
+    | some p => do
+      let text ← IO.FS.readFile p
+      pure <| (text.splitOn "\n").toArray.filterMap fun l =>
+        let t := l.toList.filter (fun c => !c.isWhitespace) |>.foldl (fun acc c => acc.push c) ""
+        if t.isEmpty then none else some t.toName
+    | none => pure a.imports
+  let env ← importModules (imports.map ({ module := · })) {}
   let kenv := env.toKernelEnv
   let t3 ← IO.monoMsNow
   -- Library constants must be the environment's own.
@@ -239,6 +250,7 @@ unsafe def runFast (a : Args) : IO UInt32 := do
   let t4 ← IO.monoMsNow
   let common : List (String × Json) := [
     ("mode", Json.str "fast"), ("meta", meta?.getD .null), ("constants", toJson exported.constOrder.size),
+    ("imports", toJson imports.size),
     ("library_same", toJson same), ("library_mismatched", toJson mismatched.size),
     ("own", toJson fresh.size),
     ("own_kinds", Json.mkObj (freshKinds.toList.map fun (k, v) => (k, toJson v))),

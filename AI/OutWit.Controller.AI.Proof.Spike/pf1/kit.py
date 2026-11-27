@@ -210,7 +210,8 @@ def variants(kit: Kit, artifacts: str) -> int:
     # A wording that differs: the same theorem, its statement written another way.
     wording, how = reword(kit.name, challenge_text)
     record["wording_change"] = how
-    module = kit.challenge.rsplit(".", 1)[0] + ".PF1Wording" if "." in kit.challenge else "PF1Wording"
+    # A top-level name of its own: Lean looks a module up under the first folder holding its root.
+    module = "PF1Wording"
     record["wording_compile"] = compile_module(kit, folder, module, wording, lean_path)
     if record["wording_compile"]["exit"] == 0:
         target = os.path.join(kit.exports, "wording.ndjson")
@@ -260,13 +261,47 @@ def reword(kit: str, text: str) -> tuple[str, str]:
     return text.replace(old, new, 1), f"{old!r} -> {new!r} (first occurrence)"
 
 
+IMPORT_LINE = re.compile(r"^\s*(?:public\s+)?(?:meta\s+)?import\s+(?:all\s+)?([A-Za-z0-9_.'«»]+)", re.M)
+
+
+def trusted_imports(kit: Kit) -> tuple[list, dict]:
+    """The modules of the trusted environment (the Mathlib revision and the packages it carries,
+    and the toolchain's own) that the project and its other dependencies import: the environment
+    the project was elaborated in, which the fast driver must import, no more."""
+    packages = os.path.join(kit.project, ".lake", "packages")
+    mathlib_manifest = json.load(open(os.path.join(packages, "mathlib", "lake-manifest.json"), encoding="utf-8"))
+    trusted = {"mathlib"} | {p["name"] for p in mathlib_manifest.get("packages", [])}
+    trusted_dirs = [os.path.join(kit.root, "lib", "lean")]
+    trusted_dirs += [os.path.join(packages, name, ".lake", "build", "lib", "lean") for name in sorted(trusted)]
+    sources = [kit.project] + [os.path.join(packages, name) for name in sorted(os.listdir(packages)) if name not in trusted]
+    found: set = set()
+    for source in sources:
+        for folder, dirs, names in os.walk(source):
+            dirs[:] = [d for d in dirs if d not in (".git", ".lake")]
+            for name in names:
+                if name.endswith(".lean"):
+                    with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as handle:
+                        found.update(IMPORT_LINE.findall(handle.read()))
+    kept = sorted(m for m in found
+                  if any(os.path.isfile(os.path.join(d, *m.split(".")) + ".olean") for d in trusted_dirs))
+    return kept, {"trusted_packages": sorted(trusted), "scanned": [os.path.relpath(s, kit.project) for s in sources],
+                  "imports_seen": len(found), "trusted_imports": len(kept)}
+
+
 def driver(kit: Kit, exe: str) -> int:
     lean_path = kit.lean_path()
     env = kit.env(lean_path)
     record = {"kit": kit.name}
+    imports, how = trusted_imports(kit)
+    record["imports"] = how
+    imports_file = os.path.join(kit.work, "imports.txt")
+    with open(imports_file, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(imports) + "\n")
+    print(json.dumps(how), flush=True)
     challenge = os.path.join(kit.exports, "challenge.ndjson")
     theorems = ",".join(kit.theorems)
-    runs = [("accepted", "solution.ndjson", challenge, theorems, None)]
+    runs = [("accepted", "solution.ndjson", challenge, theorems, None),
+            ("whole_library", "solution.ndjson", challenge, theorems, None)]
     for mode in doctor.MODES[kit.name]:
         runs.append((f"doctored_{mode['label']}", f"doctored-{mode['label']}.ndjson", challenge, theorems, None))
     if os.path.isfile(os.path.join(kit.exports, "wording.ndjson")):
@@ -278,9 +313,11 @@ def driver(kit: Kit, exe: str) -> int:
         runs.append(("negative_sorry", "negative.ndjson", negative, variants_record["negative_theorem"], None))
     for label, solution, chal, names, axioms in runs:
         cmd = [exe, "fast", os.path.join(kit.exports, solution), "--challenge", chal, "--theorems", names,
-               "--import", "Mathlib"]
+               "--imports-file", imports_file]
         if axioms:
             cmd += ["--axioms", axioms]
+        if label == "whole_library":
+            cmd = cmd[:cmd.index("--imports-file")] + ["--import", "Mathlib"]
         print(f"--- driver fast: {label}", flush=True)
         row = capped(cmd, env=env, cwd=kit.work, timeout=3 * 3600)
         row["result"] = row.pop("json", None)

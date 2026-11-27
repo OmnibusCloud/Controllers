@@ -30,6 +30,7 @@ WORK="$(cd "$WORK" && pwd)"
 CERT_DIR="$(dirname "$CERT")"
 LOG="$WORK/recheck.log"
 step() { echo "== $(date -u +%H:%M:%S) $*" | tee -a "$LOG"; }
+native() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else echo "$1"; fi; }
 sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 case "$(uname -s)-$(uname -m)" in
@@ -70,7 +71,7 @@ KER_ROOT="$(fetch_lean "$KERNEL_LEAN")"
 step "2. the export, its digest checked"
 SOLUTION="$WORK/solution.ndjson"
 case "$EXPORT_FILE" in
-  *.zst) zstd -dc "$CERT_DIR/$EXPORT_FILE" > "$SOLUTION" 2>/dev/null          || python3 -c "import sys, shutil; from compression import zstd; shutil.copyfileobj(zstd.open(sys.argv[1]), open(sys.argv[2], 'wb'), 1 << 22)" "$CERT_DIR/$EXPORT_FILE" "$SOLUTION" 2>/dev/null          || node -e "const fs=require('fs'),z=require('zlib');fs.createReadStream(process.argv[1]).pipe(z.createZstdDecompress()).pipe(fs.createWriteStream(process.argv[2]))" "$CERT_DIR/$EXPORT_FILE" "$SOLUTION" ;;
+  *.zst) zstd -dc "$CERT_DIR/$EXPORT_FILE" > "$SOLUTION" 2>/dev/null          || python3 -c "import sys, shutil; from compression import zstd; shutil.copyfileobj(zstd.open(sys.argv[1]), open(sys.argv[2], 'wb'), 1 << 22)" "$CERT_DIR/$EXPORT_FILE" "$SOLUTION" 2>/dev/null          || node -e "const fs=require('fs'),z=require('zlib');fs.createReadStream(process.argv[1]).pipe(z.createZstdDecompress()).pipe(fs.createWriteStream(process.argv[2]))" "$(native "$CERT_DIR/$EXPORT_FILE")" "$(native "$SOLUTION")" ;;
   *) cp "$CERT_DIR/$EXPORT_FILE" "$SOLUTION" ;;
 esac
 [ "$(sha "$SOLUTION")" = "$EXPORT_SHA256" ] || { echo "export: digest differs" >&2; exit 3; }
@@ -90,11 +91,12 @@ mkdir -p "$SRC/$(dirname "$(echo "$CHALLENGE_MODULE" | tr . /)")"
 REL="$(echo "$CHALLENGE_MODULE" | tr . /)"
 cp "$CERT_DIR/$CHALLENGE_FILE" "$SRC/$REL.lean"
 LP="$(cd "$ML" && lake env printenv LEAN_PATH)"
-SEP=":"; [ "$OSK" = windows ] && SEP=";"
-(cd "$SRC" && LEAN_PATH="$LP$SEP$SRC" lean -o "$REL.olean" "$REL.lean")
+SEP=":"; SRCP="$SRC"
+if [ "$OSK" = windows ]; then SEP=";"; SRCP="$(cygpath -w "$SRC")"; fi
+(cd "$SRC" && LEAN_PATH="$LP$SEP$SRCP" lean -o "$REL.olean" "$REL.lean")
 NAMES="Quot Quot.mk Quot.lift Quot.ind $(echo "$THEOREMS" | tr , ' ') $(echo "$AXIOMS" | tr , ' ') Nat.add Nat.sub Nat.mul Nat.pow Nat.gcd Nat.div Nat.mod Nat.beq Nat.ble Nat.land Nat.lor Nat.xor Nat.shiftLeft Nat.shiftRight String.ofList Char.ofNat List eagerReduce Nat String String.mk Char optParam autoParam semiOutParam outParam"
 # shellcheck disable=SC2086
-(cd "$SRC" && LEAN_PATH="$LP$SEP$SRC" leanexport "$CHALLENGE_MODULE" -- $NAMES > "$WORK/challenge.ndjson")
+(cd "$SRC" && LEAN_PATH="$LP$SEP$SRCP" leanexport "$CHALLENGE_MODULE" -- $NAMES > "$WORK/challenge.ndjson")
 GOT="$(sha "$WORK/challenge.ndjson")"
 echo "challenge export $GOT (certificate: $CHALLENGE_EXPORT_SHA256)" | tee -a "$LOG"
 [ "$GOT" = "$CHALLENGE_EXPORT_SHA256" ] || { echo "challenge export: digest differs" >&2; exit 4; }

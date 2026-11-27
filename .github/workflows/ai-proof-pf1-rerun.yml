@@ -1,0 +1,146 @@
+name: AI Proof PF-1 rerun
+run-name: "AI Proof PF-1 rerun: ${{ github.ref_name }}"
+
+# PF-1 of the Proof controller (a spike): kits R1 (PFR) and R2 (Carleson) built at their pinned
+# commits and exported on the submitter's side, the full stage replayed by every kernel of the
+# pinned toolchain on four platforms, the fast driver and the statement check, a closure cut
+# across processes. Everything is downloaded and run here, on hosted runners; nothing is published.
+# A run starts when pf1/run/rerun.txt changes; a newer run waits for the older one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf1
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf1/run/rerun.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf1-rerun-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kit:
+    name: kit again ${{ matrix.kit }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { kit: R1, lean: 4.36.0 }
+          - { kit: R2, lean: 4.36.0-rc1 }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-kit-${{ matrix.kit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - name: Free disk
+        run: |
+          df -h / /mnt || true
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h / /mnt || true
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Toolchains
+        run: |
+          python "$PF1/lean.py" fetch --version "${{ matrix.lean }}" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name LEAN_ROOT
+          if [ "${{ matrix.lean }}" != "$PIN" ]; then
+            python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc-pin" --record "$OUT/toolchain-pin.json" --env-name PIN_ROOT
+          else
+            echo "PIN_ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Driver
+        run: python "$PF1/lean.py" driver --root "$LEAN_ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+
+      - name: Build the project
+        id: build
+        timeout-minutes: 300
+        run: python "$PF1/kit.py" build --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT"
+
+      - name: Export
+        id: export
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 120
+        run: python "$PF1/kit.py" export --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT" --artifacts "kit-${{ matrix.kit }}"
+
+      - name: Variants
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        timeout-minutes: 60
+        run: python "$PF1/kit.py" variants --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT" --artifacts "kit-${{ matrix.kit }}"
+
+      # The replay jobs wait for this artifact and start as soon as it is there.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        with:
+          name: kit-${{ matrix.kit }}
+          path: kit-${{ matrix.kit }}
+          retention-days: 7
+          compression-level: 0
+
+      - name: Fast driver (the trusted environment of the revision)
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        timeout-minutes: 150
+        run: python "$PF1/kit.py" driver --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT" --driver "$DRIVER"
+
+      - name: Statement check refusals (lake comparator of the pinned toolchain)
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        timeout-minutes: 90
+        run: python "$PF1/kit.py" judge --kit ${{ matrix.kit }} --root "$PIN_ROOT" --work "$PF0_WORK/kit" --out "$OUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-kit-${{ matrix.kit }}
+          path: results-kit-${{ matrix.kit }}
+          retention-days: 14
+
+  old:
+    name: old revision ${{ matrix.which }}
+    strategy:
+      fail-fast: false
+      matrix:
+        which: [A, B]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OUT: results-old-${{ matrix.which }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Pinned toolchain (the readers)
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc-pin" --record "$OUT/toolchain-pin.json" --env-name PIN_ROOT
+      - name: Probe and export
+        timeout-minutes: 160
+        run: python "$PF1/profile.py" old --which ${{ matrix.which }} --work "$PF0_WORK" --out "$OUT" --pin-root "$PIN_ROOT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-old-${{ matrix.which }}
+          path: results-old-${{ matrix.which }}
+          retention-days: 14
