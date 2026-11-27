@@ -139,7 +139,7 @@ jobs:
           json.dump(out, open(os.path.join(os.environ["OUT"], "wasm-sha256.json"), "w"), indent=1)
           print(out)
           EOF
-      - name: wasmtime ${{ env.PIN }} and the toolchain
+      - name: wasmtime
         run: |
           python - <<'EOF'
           import hashlib, os, subprocess, sys, tarfile, zipfile
@@ -164,6 +164,8 @@ jobs:
               env.write(f"WASMTIME={os.path.abspath(exe)}\n")
           print(exe, got)
           EOF
+      - name: wasmtime's options and the toolchain
+        run: |
           "$WASMTIME" --version | tee "$OUT/wasmtime-version.txt"
           "$WASMTIME" run -W help > "$OUT/wasmtime-W-help.txt" 2>&1 || true
           "$WASMTIME" run -S help > "$OUT/wasmtime-S-help.txt" 2>&1 || true

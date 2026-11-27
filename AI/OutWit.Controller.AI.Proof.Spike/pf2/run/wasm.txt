@@ -1,1 +1,1 @@
-wasm: run 2 (2026-11-27): the pin lookup without psutil;: nanoda and con-ron for wasm32-wasip1 under wasmtime 48.0.8, kit R1 on four platforms, the compact export on linux-x64
+wasm: run 3 (2026-11-27): wasmtime found in the step after it is fetched;: nanoda and con-ron for wasm32-wasip1 under wasmtime 48.0.8, kit R1 on four platforms, the compact export on linux-x64
