@@ -1,0 +1,189 @@
+name: AI Proof PF-1 profiles
+run-name: "AI Proof PF-1 profiles: ${{ github.ref_name }}"
+
+# PF-1 of the Proof controller (a spike): a `replay` profile of kit R2's Mathlib revision fetched
+# by two runners through Mathlib's tool and by a third over plain HTTPS by key, the manifests
+# compared; whether older revisions are still served; an older Lean's export through the separate
+# exporter's matching tag, read by the pinned kernels; a revision built from source against the
+# cache's bytes. Everything is downloaded and run here; nothing is published.
+# A run starts when pf1/run/profiles.txt changes; a newer run waits for the older one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf1
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf1/run/profiles.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf1-profiles-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+  R2_LEAN: 4.36.0-rc1
+  R2_MATHLIB: d88814353fcbcc0461c55b2a4585d3f44d903df1
+  PIN_MATHLIB: fc4f59e577feb1a4956671bc04ac18aaaf8cd842
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Mathlib's own route on two runners: the same revision, two manifests.
+  fetch:
+    name: fetch R2's revision on ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04 }
+          - { rid: win-x64, os: windows-2022 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      OUT: profile-${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$R2_LEAN" --rid "${{ matrix.rid }}" --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name LEAN_ROOT
+      - name: Fetch, unpack, manifests
+        timeout-minutes: 90
+        run: python "$PF1/profile.py" fetch --rev "$R2_MATHLIB" --root "$LEAN_ROOT" --work "$PF0_WORK/profile" --out "$OUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: profile-${{ matrix.rid }}
+          path: profile-${{ matrix.rid }}
+          retention-days: 14
+
+  # Without Mathlib's tool, git or lake: the files by key over plain HTTPS, on a third runner.
+  https:
+    needs: fetch
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    env:
+      OUT: profile-https-linux-arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: profile-linux-x64
+          path: first
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain (for its leantar only)
+        run: python "$PF1/lean.py" fetch --version "$R2_LEAN" --rid linux-arm64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name LEAN_ROOT
+      - name: Fetch by key, unpack, manifest
+        timeout-minutes: 60
+        run: python "$PF1/profile.py" https --manifest first/ltar.tsv --root "$LEAN_ROOT" --work "$PF0_WORK/https" --out "$OUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: profile-https-linux-arm64
+          path: profile-https-linux-arm64
+          retention-days: 14
+
+  compare:
+    needs: [fetch, https]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: profile-*
+          path: profiles
+      - name: Compare
+        run: |
+          ls profiles
+          python "$PF1/profile.py" compare profiles/profile-linux-x64 profiles/profile-win-x64 profiles/profile-https-linux-arm64 --out compare/compare.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-profile-compare
+          path: compare
+          retention-days: 14
+
+  # Older revisions: still served? And an older Lean's export, read by the pinned kernels.
+  old:
+    name: old revision ${{ matrix.which }}
+    strategy:
+      fail-fast: false
+      matrix:
+        which: [A, B, C]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OUT: results-old-${{ matrix.which }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Pinned toolchain (the readers)
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc-pin" --record "$OUT/toolchain-pin.json" --env-name PIN_ROOT
+      - name: Probe and export
+        timeout-minutes: 160
+        run: python "$PF1/profile.py" old --which ${{ matrix.which }} --work "$PF0_WORK" --out "$OUT" --pin-root "$PIN_ROOT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-old-${{ matrix.which }}
+          path: results-old-${{ matrix.which }}
+          retention-days: 14
+
+  # The profile's revision built from source for as long as a hosted runner allows.
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-rebuild
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h / /mnt || true
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name LEAN_ROOT
+      - name: The cache's bytes (and PF-0's digests again)
+        timeout-minutes: 60
+        run: python "$PF1/profile.py" fetch --rev "$PIN_MATHLIB" --root "$LEAN_ROOT" --work "$PF0_WORK/profile" --out "$OUT"
+      - name: Build from source and compare
+        timeout-minutes: 290
+        run: python "$PF1/profile.py" rebuild --rev "$PIN_MATHLIB" --root "$LEAN_ROOT" --work "$PF0_WORK/profile" --out "$OUT" --minutes 270
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-rebuild
+          path: results-rebuild
+          retention-days: 14
