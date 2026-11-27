@@ -1,1 +1,1 @@
-isolation: run 3 (2026-11-27): sandbox-exec profiles in three variants with the sandbox's denials logged; git on the sandbox's PATH for lake comparator
+isolation: run 4 (2026-11-27): sandbox-exec profiles in three variants with the sandbox's denials logged; which, git and env reachable for lake comparator inside the sandboxes

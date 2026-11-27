@@ -85,6 +85,9 @@ def wrap(mode: str, cmd: list, root: str, job: str, probe: bool = False) -> list
                 "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
                 "--symlink", "usr/bin", "/bin", "--symlink", "usr/sbin", "/sbin",
                 "--ro-bind", "/etc/ld.so.cache", "/etc/ld.so.cache",
+                # `lake comparator` runs `which git` and `which env` before anything else; on
+                # Debian and Ubuntu `which` is a link through /etc/alternatives.
+                "--ro-bind-try", "/etc/alternatives", "/etc/alternatives",
                 "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
                 "--ro-bind", root, root, "--bind", job, job, "--chdir", job,
                 "--setenv", "PATH", f"{root}/bin:/usr/bin", "--setenv", "HOME", job, "--setenv", "LEAN_ABORT_ON_PANIC", "1"]
@@ -115,11 +118,16 @@ def windows_run(sandbox: str, mode: str, cmd: list, root: str, job: str, cap_min
     if not children:
         argv.append("--no-children")
     else:
-        # `lake comparator` will not start without git on PATH, even when it judges two exports
-        # and builds nothing: the folder of the host's git goes on the sandbox's PATH.
-        git = shutil.which("git")
+        # `lake comparator` will not start without `which`, `git` and `env` (it runs `which git` and
+        # `which env`), even when it judges two exports and builds nothing: on Windows those are
+        # Git for Windows' programs, and their folders go on the sandbox's PATH.
+        found = [shutil.which(name) for name in ("which", "git", "env")]
+        folders = []
+        for exe in found:
+            if exe and os.path.dirname(exe) not in folders:
+                folders.append(os.path.dirname(exe))
         system = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
-        path = os.pathsep.join([os.path.join(root, "bin")] + ([os.path.dirname(git)] if git else []) + [system])
+        path = os.pathsep.join([os.path.join(root, "bin")] + folders + [system])
         argv += ["--env", f"PATH={path}"]
     row = run_tree(argv + ["--"] + cmd, timeout=cap_min * 60 + 120)
     text = row.pop("stdout_tail", "")
