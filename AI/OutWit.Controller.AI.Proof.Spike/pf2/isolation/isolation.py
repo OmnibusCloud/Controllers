@@ -34,23 +34,44 @@ from common import comparator_command, comparator_config, kernel_command, lean_e
 STANDARD_AXIOMS = ["propext", "Quot.sound", "Classical.choice"]
 
 
-def macos_profile(root: str, job: str, probe: bool) -> str:
-    """A deny-by-default profile: read the toolchain and the system's libraries, write the job
-    folder, execute only the toolchain (and, for the probes, the system's command-line tools)."""
-    execs = f'(subpath "{root}")' + (' (subpath "/bin") (subpath "/usr/bin")' if probe else "")
+def macos_profile(root: str, job: str, probe: bool, variant: str = "strict") -> str:
+    """sandbox-exec profiles (SBPL; a later rule wins over an earlier one).
+
+    strict:   deny by default; read the toolchain and the system's libraries, map them executable,
+              write only the job folder, execute only the toolchain (and, for the probes, the
+              system's command-line tools); no network.
+    system:   the same, on top of Apple's own baseline (`system.sb`) instead of a hand-made one.
+    denylist: allow by default; deny the network, reading the users' and volumes' folders, and
+              writing anywhere but the job folder (weaker: what is not named is allowed)."""
+    bins = ' (subpath "/bin") (subpath "/usr/bin")' if probe else ""
+    execs = f'(subpath "{root}")' + bins
+    if variant == "denylist":
+        return f"""(version 1)
+(allow default)
+(deny network*)
+(deny file-read* (subpath "/Users") (subpath "/Volumes") (subpath "/private/var/root") (subpath "/private/etc"))
+(deny file-write*)
+(allow file-read* (subpath "{root}") (subpath "{job}"))
+(allow file-write* (subpath "{job}") (literal "/dev/null") (literal "/dev/dtracehelper"))
+(deny process-exec)
+(allow process-exec {execs})
+"""
+    base = '(import "system.sb")\n' if variant == "system" else ""
     return f"""(version 1)
 (deny default)
-(allow process-fork)
+{base}(allow process-fork)
 (allow process-exec {execs})
+(allow process-info* (target self))
 (allow file-read-metadata)
-(allow file-read* (subpath "/usr/lib") (subpath "/usr/share") (subpath "/System") (subpath "/Library/Apple")
-  (subpath "/private/var/db/timezone") (subpath "/bin") (subpath "/usr/bin")
+(allow file-read* (literal "/") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/System") (subpath "/Library/Apple")
+  (subpath "/private/var/db/timezone") (subpath "/private/var/db/dyld") (subpath "/bin") (subpath "/usr/bin")
   (literal "/dev/null") (literal "/dev/zero") (literal "/dev/urandom") (literal "/dev/random") (literal "/dev/dtracehelper")
   (subpath "{root}") (subpath "{job}"))
+(allow file-map-executable (subpath "/usr/lib") (subpath "/System") (subpath "/bin") (subpath "/usr/bin") (subpath "{root}"))
 (allow file-write* (subpath "{job}") (literal "/dev/null") (literal "/dev/dtracehelper"))
-(allow file-ioctl (literal "/dev/dtracehelper"))
+(allow file-ioctl (literal "/dev/dtracehelper") (literal "/dev/null"))
 (allow sysctl-read)
-(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))
+(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.system.logger"))
 (allow signal (target self))
 (deny network*)
 """
@@ -73,9 +94,10 @@ def wrap(mode: str, cmd: list, root: str, job: str, probe: bool = False) -> list
         return ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
                 "--bind", job, job, "--unshare-all", "--die-with-parent", "--chdir", job, "--"] + cmd
     if mode == "sandbox-exec":
-        profile = os.path.join(job, "pf2-probe.sb" if probe else "pf2-kernel.sb")
+        profile = os.path.join(job, ("pf2-probe-" if probe else "pf2-kernel-") + os.environ.get("PF2_SB_VARIANT", "strict") + ".sb")
         with open(profile, "w", encoding="utf-8") as handle:
-            handle.write(macos_profile(os.path.realpath(root), os.path.realpath(job), probe))
+            handle.write(macos_profile(os.path.realpath(root), os.path.realpath(job), probe,
+                                       os.environ.get("PF2_SB_VARIANT", "strict")))
         return ["sandbox-exec", "-f", profile] + cmd
     raise ValueError(mode)
 
@@ -180,7 +202,7 @@ def probe(options) -> int:
         "connect-name": [curl, "-sS", "-m", "10", "-o", "/dev/null", "https://example.com/"],
         "connect-loopback": [curl, "-sS", "-m", "5", "-o", "/dev/null", f"http://127.0.0.1:{port}/"],
     }
-    record = {"mode": options.mode}
+    record = {"mode": options.mode, "variant": os.environ.get("PF2_SB_VARIANT", "")}
     for name, cmd in cases.items():
         written = os.path.join(outside, "written.txt")
         if os.path.exists(written):

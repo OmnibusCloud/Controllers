@@ -1,1 +1,1 @@
-isolation: run 1 (2026-11-27): bwrap (ours and comparator's), sandbox-exec, AppContainer and a Job Object, kit R1, probes
+isolation: run 2 (2026-11-27): sandbox-exec profiles in three variants with the sandbox's denials logged (run 1: every process aborted at start)

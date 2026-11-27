@@ -96,6 +96,22 @@ jobs:
               print(name, decompress(f"kit/{name}.ndjson.zst", os.path.join(job, f"{name}.ndjson")))
           EOF
           rm -rf kit
+      # A deny-by-default profile has to name everything a process needs to start (PF-2 run 1:
+      # every process aborted at start); three variants, the sandbox's own denials logged.
+      - name: sandbox-exec profiles
+        if: ${{ runner.os == 'macOS' }}
+        timeout-minutes: 20
+        run: |
+          chosen=""
+          for v in strict system denylist; do
+            PF2_SB_VARIANT=$v python "$PF2/isolation/isolation.py" probe --mode sandbox-exec --root "$PIN_ROOT" --job "$PF0_WORK/probe-job" --outside "$PF0_WORK/probe-outside" --out "$OUT/probe-sandbox-exec-$v.json" || true
+            log show --last 3m --style compact --predicate 'sender == "Sandbox" OR eventMessage CONTAINS "deny("' 2>/dev/null | tail -60 > "$OUT/sandbox-log-$v.txt" || true
+            ok=$(python -c "import json; d=json.load(open('$OUT/probe-sandbox-exec-$v.json')); print(1 if d['read-inside']['exit'] == 0 else 0)" 2>/dev/null || echo 0)
+            echo "variant $v: read-inside works: $ok"
+            if [ -z "$chosen" ] && [ "$ok" = 1 ]; then chosen=$v; fi
+          done
+          echo "PF2_SB_VARIANT=${chosen:-strict}" >> "$GITHUB_ENV"
+          echo "${chosen:-none}" > "$OUT/sandbox-exec-variant.txt"
       - name: Probes
         timeout-minutes: 30
         run: |
