@@ -114,6 +114,13 @@ def windows_run(sandbox: str, mode: str, cmd: list, root: str, job: str, cap_min
         argv.append("--lpac")
     if not children:
         argv.append("--no-children")
+    else:
+        # `lake comparator` will not start without git on PATH, even when it judges two exports
+        # and builds nothing: the folder of the host's git goes on the sandbox's PATH.
+        git = shutil.which("git")
+        system = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+        path = os.pathsep.join([os.path.join(root, "bin")] + ([os.path.dirname(git)] if git else []) + [system])
+        argv += ["--env", f"PATH={path}"]
     row = run_tree(argv + ["--"] + cmd, timeout=cap_min * 60 + 120)
     text = row.pop("stdout_tail", "")
     try:
