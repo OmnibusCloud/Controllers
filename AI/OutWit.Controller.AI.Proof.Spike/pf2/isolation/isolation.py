@@ -140,6 +140,12 @@ def windows_run(sandbox: str, mode: str, cmd: list, root: str, job: str, cap_min
         folders = [which_dir] if which_dir else []
         if which_dir:
             argv += ["--grant-read", which_dir]
+            # On an ephemeral runner only: git's and env's folders granted too, in case the image's ACL
+            # does not let ALL APPLICATION PACKAGES read them (isolation run 7).
+            if os.environ.get("PF2_GRANT_TOOLS") == "1":
+                for exe in found:
+                    if exe:
+                        argv += ["--grant-read", os.path.dirname(exe)]
         for exe in found:
             if exe and os.path.dirname(exe) not in folders:
                 folders.append(os.path.dirname(exe))
@@ -178,7 +184,12 @@ def kernels(options) -> int:
                                   children=kernel == "comparator", which_dir=options.which_dir)
                 summary = {k: row.get(k) for k in ("ending", "exit_code", "wall_seconds", "peak_job_memory", "grant_seconds")}
             else:
-                row = run_tree(wrap(options.mode, cmd, root, job), env=env, cwd=job, timeout=options.cap_min * 60,
+                run_env = dict(env)
+                if options.mode == "sandbox-exec":
+                    # comparator writes its kernels' configuration with IO.FS.withTempFile: TMPDIR must be
+                    # inside the job folder, the only place the profile lets it write (isolation run 7).
+                    run_env["TMPDIR"] = os.path.realpath(job)
+                row = run_tree(wrap(options.mode, cmd, root, job), env=run_env, cwd=job, timeout=options.cap_min * 60,
                                memory_gib=options.memory_gib or None, stack_unlimited=True)
                 row.pop("stdout_tail", None)
                 summary = {k: row.get(k) for k in ("ending", "exit", "wall_s", "tree_rss", "scope_anon")}

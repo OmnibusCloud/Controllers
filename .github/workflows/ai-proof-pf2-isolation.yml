@@ -128,8 +128,25 @@ jobs:
               python "$PF2/isolation/isolation.py" probe --mode "$mode" --root "$PIN_ROOT" --job "$PF0_WORK/probe-job" --outside "$PF0_WORK/probe-outside" --out "$OUT/probe-$mode.json"
             done
           fi
+      # Run 7: on the runner our `which` found no git inside the AppContainer (it did on the workstation).
+      - name: Our which inside the AppContainer
+        if: ${{ runner.os == 'Windows' }}
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p "$PF0_WORK/which-job"
+          GITDIR=$(dirname "$(command -v git)")
+          { echo "git: $(command -v git)"; echo "env: $(command -v env)"; icacls "$(cygpath -w "$GITDIR")" | head -12; } > "$OUT/which-appcontainer.txt" 2>&1
+          for name in git env; do
+            "$SANDBOX" run --name pf2-which --job-dir "$PF0_WORK/which-job" --grant-read "$WHICH_DIR" --env "PATH=$(cygpath -w "$WHICH_DIR");$(cygpath -w "$GITDIR");$(cygpath -w /usr/bin);C:\Windows\System32" -- "$(cygpath -w "$WHICH_DIR")\which.exe" "$name" >> "$OUT/which-appcontainer.txt" 2>&1
+          done
+          "$SANDBOX" cleanup --name pf2-which --grant-read "$WHICH_DIR" --job-dir "$PF0_WORK/which-job" >> "$OUT/which-appcontainer.txt" 2>&1
+          cat "$OUT/which-appcontainer.txt"
+          exit 0
       - name: Kernels and the comparator tree, raw and sandboxed
         timeout-minutes: 180
+        env:
+          PF2_GRANT_TOOLS: "1"
         run: |
           THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
           for mode in $(echo "${{ matrix.modes }}" | tr , ' '); do

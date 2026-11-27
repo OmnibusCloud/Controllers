@@ -1,1 +1,1 @@
-isolation: run 7 (2026-11-27): our which self-contained in the Windows AppContainer; on macOS the host's git executable in the comparator's profile (which sees a file as executable only where the profile lets it run)
+isolation: run 8 (2026-11-27): TMPDIR in the job folder under sandbox-exec (comparator writes its kernels' configuration there); our which run inside the AppContainer on the runner, git's folder granted on the runner
