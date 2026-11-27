@@ -1,0 +1,9 @@
+name = "proofdriver"
+defaultTargets = ["proofdriver"]
+
+# The driver links the toolchain's own export reader (libLeanExport) and comparator's statement
+# check and axiom audit (Lake); both ship inside every release from Lean 4.35.
+[[lean_exe]]
+name = "proofdriver"
+root = "ProofDriver"
+moreLinkArgs = ["-lLeanExport", "-lLake"]

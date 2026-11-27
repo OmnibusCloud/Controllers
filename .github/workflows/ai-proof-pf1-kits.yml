@@ -1,0 +1,261 @@
+name: AI Proof PF-1 kits
+run-name: "AI Proof PF-1 kits: ${{ github.ref_name }}"
+
+# PF-1 of the Proof controller (a spike): kits R1 (PFR) and R2 (Carleson) built at their pinned
+# commits and exported on the submitter's side, the full stage replayed by every kernel of the
+# pinned toolchain on four platforms, the fast driver and the statement check, a closure cut
+# across processes. Everything is downloaded and run here, on hosted runners; nothing is published.
+# A run starts when pf1/run/kits.txt changes; a newer run waits for the older one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf1
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf1/run/kits.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf1-kits-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # The submitter's side: build, export, the variants that must be refused, the fast driver.
+  kit:
+    name: kit ${{ matrix.kit }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { kit: R1, lean: 4.36.0 }
+          - { kit: R2, lean: 4.36.0-rc1 }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-kit-${{ matrix.kit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - name: Free disk
+        run: |
+          df -h / /mnt || true
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h / /mnt || true
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Toolchains
+        run: |
+          python "$PF1/lean.py" fetch --version "${{ matrix.lean }}" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name LEAN_ROOT
+          if [ "${{ matrix.lean }}" != "$PIN" ]; then
+            python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc-pin" --record "$OUT/toolchain-pin.json" --env-name PIN_ROOT
+          else
+            echo "PIN_ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Driver
+        run: python "$PF1/lean.py" driver --root "$LEAN_ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+
+      - name: Build the project
+        id: build
+        timeout-minutes: 300
+        run: python "$PF1/kit.py" build --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT"
+
+      - name: Export
+        id: export
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 120
+        run: python "$PF1/kit.py" export --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT" --artifacts "kit-${{ matrix.kit }}"
+
+      - name: Variants
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        timeout-minutes: 60
+        run: python "$PF1/kit.py" variants --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT" --artifacts "kit-${{ matrix.kit }}"
+
+      # The replay jobs wait for this artifact and start as soon as it is there.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        with:
+          name: kit-${{ matrix.kit }}
+          path: kit-${{ matrix.kit }}
+          retention-days: 7
+          compression-level: 0
+
+      - name: Fast driver (the trusted environment of the revision)
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        timeout-minutes: 150
+        run: python "$PF1/kit.py" driver --kit ${{ matrix.kit }} --root "$LEAN_ROOT" --work "$PF0_WORK/kit" --out "$OUT" --driver "$DRIVER"
+
+      - name: Statement check refusals (lake comparator of the pinned toolchain)
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        timeout-minutes: 90
+        run: python "$PF1/kit.py" judge --kit ${{ matrix.kit }} --root "$PIN_ROOT" --work "$PF0_WORK/kit" --out "$OUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-kit-${{ matrix.kit }}
+          path: results-kit-${{ matrix.kit }}
+          retention-days: 14
+
+  # The full stage: each kernel of the pinned toolchain over the whole closure, on four platforms.
+  replay:
+    name: replay ${{ matrix.kit }} on ${{ matrix.rid }}
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        kit: [R1, R2]
+        rid: [linux-x64, linux-arm64, win-x64, osx-arm64]
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04, steps: "leanchecker,nanoda-4,con-ron,comparator,comparator-bwrap,nanoda-1,con-leche,lean4lean,comparator-nanoda", budget: 280 }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm, steps: "leanchecker,nanoda-4,con-ron,comparator,comparator-bwrap", budget: 280 }
+          - { rid: win-x64, os: windows-2022, steps: "leanchecker,nanoda-4,con-ron,comparator", budget: 280 }
+          - { rid: osx-arm64, os: macos-15, steps: "nanoda-4,con-ron,leanchecker,comparator", budget: 280 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 355
+    env:
+      OUT: results-replay-${{ matrix.kit }}-${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Toolchain
+        run: python "$PF1/lean.py" fetch --version "$PIN" --rid "${{ matrix.rid }}" --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+
+      - name: bubblewrap (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -q bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-all /usr/bin/true && echo "bwrap starts"
+
+      - name: Wait for the kit's export
+        timeout-minutes: 340
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: kit-${{ matrix.kit }}
+        run: |
+          for attempt in $(seq 1 680); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name' | grep -qx "$WANTED"; then
+              break
+            fi
+            sleep 30
+          done
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$WANTED" --dir kit
+          ls -la kit
+
+      - name: Unpack
+        run: |
+          python - <<'EOF'
+          import json, os, sys
+          sys.path.insert(0, os.environ["PF1"])
+          from common import decompress, sha256_file, write_json
+          work = os.environ["PF0_WORK"]
+          sent = json.load(open("kit/exports.json"))
+          record = {}
+          for label in ("solution", "challenge"):
+              target = os.path.join(work, f"{label}.ndjson")
+              seconds = decompress(f"kit/{label}.ndjson.zst", target)
+              record[label] = {"unpack_s": seconds, "sha256_matches": sha256_file(target) == sent[label]["sha256"],
+                               "bytes": os.path.getsize(target)}
+              os.remove(f"kit/{label}.ndjson.zst")
+          write_json(os.path.join(os.environ["OUT"], "unpack.json"), record)
+          print(record)
+          EOF
+
+      - name: Kernels and comparator
+        timeout-minutes: 300
+        run: |
+          THEOREMS=$(grep "^${{ matrix.kit }}_THEOREMS=" "$PF1/pins.env" | cut -d= -f2)
+          python "$PF1/replay.py" --root "$PIN_ROOT" --export "$PF0_WORK/solution.ndjson" --challenge "$PF0_WORK/challenge.ndjson" --theorems "$THEOREMS" --steps "${{ matrix.steps }}" --out "$OUT/replay.json" --cap-min 120 --budget-min ${{ matrix.budget }} --label "${{ matrix.kit }}-${{ matrix.rid }}"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-replay-${{ matrix.kit }}-${{ matrix.rid }}
+          path: results-replay-${{ matrix.kit }}-${{ matrix.rid }}
+          retention-days: 14
+
+  # One closure cut across processes: the per-declaration kernel times, then K slices by them.
+  split:
+    name: split ${{ matrix.kit }}
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        kit: [R1, R2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      OUT: results-split-${{ matrix.kit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Toolchain and driver
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          python "$PF1/lean.py" driver --root "$ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+
+      - name: Wait for the kit's export
+        timeout-minutes: 340
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: kit-${{ matrix.kit }}
+        run: |
+          for attempt in $(seq 1 680); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name' | grep -qx "$WANTED"; then
+              break
+            fi
+            sleep 30
+          done
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$WANTED" --dir kit
+          python -c "import sys; sys.path.insert(0, '$PF1'); from common import decompress; print(decompress('kit/solution.ndjson.zst', '$PF0_WORK/solution.ndjson'))"
+
+      - name: Profile and slices
+        timeout-minutes: 300
+        run: python "$PF1/replay.py" --root "$PIN_ROOT" --export "$PF0_WORK/solution.ndjson" --steps driver-profile,driver-slices --driver "$DRIVER" --slices 4 --out "$OUT/split.json" --cap-min 150 --label "${{ matrix.kit }}-split"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-split-${{ matrix.kit }}
+          path: results-split-${{ matrix.kit }}
+          retention-days: 14
