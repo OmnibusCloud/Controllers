@@ -338,6 +338,10 @@ def run(options) -> int:
             cmd = [options.leche_compare, "--compare", challenge, export]
         elif step == "ron-compare":
             cmd = [options.ron_compare, "--compare", challenge, export]
+        elif step.startswith("con-leche-j"):
+            # con-leche starts one worker per hardware thread unless told otherwise.
+            cmd = [os.path.join(root, "bin", "con-leche" + (".exe" if sys.platform == "win32" else "")),
+                   f"--jobs={step.split('-j')[1]}", export]
         else:
             cmd = kernel_command(root, step, export, folder)
         row = run_tree(cmd, env=env, cwd=folder, timeout=cap, memory_gib=options.memory_gib or None,

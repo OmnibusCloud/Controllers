@@ -49,6 +49,27 @@ def _sum_rss(processes: list) -> tuple[int, int, int]:
     return rss, private, count
 
 
+def _available_commit() -> int | None:
+    """Windows: the commit the whole machine has left (a run that exhausts it breaks every
+    process of the machine, the fleet client's included: PF-2 saw it)."""
+    if not IS_WINDOWS:
+        return None
+    import ctypes
+
+    class Status(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    status = Status()
+    status.dwLength = ctypes.sizeof(status)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None
+    return int(status.ullAvailPageFile)
+
+
 def _cgroup_anon(unit: str) -> int | None:
     for base in ("/sys/fs/cgroup/system.slice", "/sys/fs/cgroup"):
         path = os.path.join(base, unit + ".scope", "memory.stat")
@@ -111,6 +132,14 @@ def run_tree(cmd: list, env: dict | None = None, cwd: str | None = None, timeout
 
     def sample() -> None:
         while not stop.is_set():
+            try:
+                sample_once()
+            except Exception as error:  # the guard must outlive a failed sample
+                row.setdefault("sample_errors", []).append(str(error)[:200])
+            stop.wait(0.5)
+
+    def sample_once() -> None:
+        if True:
             processes = _tree(root)
             rss, private, count = _sum_rss(processes)
             for p in processes:
@@ -132,15 +161,16 @@ def run_tree(cmd: list, env: dict | None = None, cwd: str | None = None, timeout
                     killed[0] = "wall_cap"
                 elif sampled_cap and rss > sampled_cap:
                     killed[0] = "memory_cap"
-                elif guard_bytes and rss > guard_bytes:
+                elif guard_bytes and (rss > guard_bytes or (IS_WINDOWS and private > guard_bytes)):
                     killed[0] = "guard"
+                elif IS_WINDOWS and guard_bytes and (_available_commit() or 1 << 62) < (8 << 30):
+                    killed[0] = "guard_commit"
                 if killed[0] is not None:
                     for p in reversed(processes):
                         try:
                             p.kill()
                         except psutil.Error:
                             pass
-            stop.wait(0.5)
 
     sampler = threading.Thread(target=sample, daemon=True)
     sampler.start()
@@ -173,7 +203,7 @@ def run_tree(cmd: list, env: dict | None = None, cwd: str | None = None, timeout
     err_handle.close()
     row.update({"exit": exit_code, "wall_s": round(wall, 1), "cpu": cpu, "killed": killed[0], **peaks})
     # How the run ended, in the certificate's words (spec section 6.5): only exit 0 is "accepted".
-    if killed[0] in ("memory_cap", "guard"):
+    if killed[0] in ("memory_cap", "guard", "guard_commit"):
         ending = "memory_cap"
     elif killed[0] == "wall_cap":
         ending = "wall_cap"
