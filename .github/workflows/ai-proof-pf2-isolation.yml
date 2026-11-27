@@ -77,7 +77,9 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: |
           dotnet publish "$PF2/isolation/appcontainer/Pf2Sandbox.csproj" -c Release -o "$PF0_WORK/sandbox" -nologo -v q
-          dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -o "$PF0_WORK/which" -nologo -v q
+          # Self-contained: inside the AppContainer a framework-dependent app cannot reach a .NET runtime
+          # installed under the user's profile (run 6).
+          dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$PF0_WORK/which" -nologo -v q
           echo "SANDBOX=$PF0_WORK/sandbox/Pf2Sandbox.exe" >> "$GITHUB_ENV"
           echo "WHICH_DIR=$PF0_WORK/which" >> "$GITHUB_ENV"
           { netsh advfirewall show allprofiles state; sc query mpssvc; sc query bfe; } > "$OUT/firewall.txt" 2>&1 || true

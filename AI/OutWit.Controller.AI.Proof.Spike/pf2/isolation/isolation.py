@@ -45,8 +45,15 @@ def macos_profile(root: str, job: str, probe: bool, variant: str = "strict", too
               writing anywhere but the job folder (weaker: what is not named is allowed)."""
     bins = ' (subpath "/bin") (subpath "/usr/bin")' if probe else ""
     if tools and not probe:
-        # `lake comparator` runs `which git` and `which env` before it judges anything.
-        bins = ' (literal "/usr/bin/which") (literal "/usr/bin/env") (literal "/bin/sh") (literal "/bin/bash")'
+        # `lake comparator` runs `which git` and `which env` before it judges anything, and under
+        # the sandbox `which` sees a file as executable only where the profile lets it run: the
+        # host's git is named too (comparator never runs it when it judges two exports).
+        gits = []
+        git = shutil.which("git")
+        if git:
+            gits = sorted({git, os.path.realpath(git)})
+        bins = ' (literal "/usr/bin/which") (literal "/usr/bin/env") (literal "/bin/sh") (literal "/bin/bash")' + \
+            "".join(f' (literal "{g}")' for g in gits)
     execs = f'(subpath "{root}")' + bins
     if variant == "denylist":
         return f"""(version 1)

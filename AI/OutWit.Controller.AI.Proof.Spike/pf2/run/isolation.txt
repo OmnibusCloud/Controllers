@@ -1,1 +1,1 @@
-isolation: run 6 (2026-11-27): our own which for lake comparator in the Windows AppContainer (MSYS which cannot start there); what which sees under sandbox-exec
+isolation: run 7 (2026-11-27): our which self-contained in the Windows AppContainer; on macOS the host's git executable in the comparator's profile (which sees a file as executable only where the profile lets it run)
