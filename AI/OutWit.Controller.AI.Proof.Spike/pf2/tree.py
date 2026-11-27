@@ -19,7 +19,10 @@ import tempfile
 import threading
 import time
 
-import psutil
+try:
+    import psutil
+except ImportError:  # only `run_tree` needs it
+    psutil = None
 
 IS_WINDOWS = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
