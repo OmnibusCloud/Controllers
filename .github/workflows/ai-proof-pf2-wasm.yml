@@ -51,7 +51,7 @@ jobs:
       - name: Rust
         run: |
           mkdir -p "$OUT" wasm-kernels
-          rustup target add wasm32-wasip1
+          rustup target add wasm32-wasip1 wasm32-wasip1-threads
           { rustc --version; cargo --version; rustc --print target-list | grep -i wasm; } | tee "$OUT/rust.txt"
       - name: nanoda (the commit Lean 4.36.0 builds)
         run: |
@@ -62,6 +62,9 @@ jobs:
           # A 16 MiB shadow stack in linear memory, as the native checker threads have.
           s=$(date +%s); RUSTFLAGS="-C link-arg=-zstack-size=16777216" cargo build --release --locked --target wasm32-wasip1 2>&1 | tail -2; w=$(( $(date +%s) - s ))
           cp target/wasm32-wasip1/release/nanoda_bin.wasm ../wasm-kernels/nanoda.wasm
+          # The same source for wasi-threads (its checker threads as wasm threads in a shared memory).
+          RUSTFLAGS="-C link-arg=-zstack-size=16777216" cargo build --release --locked --target wasm32-wasip1-threads 2>&1 | tail -2
+          cp target/wasm32-wasip1-threads/release/nanoda_bin.wasm ../wasm-kernels/nanoda-threads.wasm
           cp target/release/nanoda_bin ../wasm-kernels/nanoda-native-linux-x64
           echo "{\"commit\": \"$COMMIT\", \"native_build_s\": $n, \"wasm_build_s\": $w}" > "../$OUT/nanoda.json"
       - name: con-ron (the commit Lean 4.36.0 builds; no mimalloc, the check on the main thread under WASI)
@@ -73,6 +76,9 @@ jobs:
           s=$(date +%s); cargo build --release --locked -p con-ron 2>&1 | tail -2; n=$(( $(date +%s) - s ))
           s=$(date +%s); RUSTFLAGS="-C link-arg=-zstack-size=16777216" cargo build --release --locked -p con-ron --target wasm32-wasip1 2>&1 | tail -2; w=$(( $(date +%s) - s ))
           cp target/wasm32-wasip1/release/con-ron.wasm ../wasm-kernels/con-ron.wasm
+          # Run 3: a 16 MiB shadow stack overflows on kit R1 (native con-ron checks on a 1 GiB thread stack).
+          RUSTFLAGS="-C link-arg=-zstack-size=536870912" cargo build --release --locked -p con-ron --target wasm32-wasip1 2>&1 | tail -2
+          cp target/wasm32-wasip1/release/con-ron.wasm ../wasm-kernels/con-ron-512.wasm
           cp target/release/con-ron ../wasm-kernels/con-ron-native-linux-x64
           echo "{\"commit\": \"$COMMIT\", \"native_build_s\": $n, \"wasm_build_s\": $w}" > "../$OUT/con-ron.json"
       - name: Digests
@@ -116,7 +122,7 @@ jobs:
     timeout-minutes: 355
     env:
       OUT: results-wasm-${{ matrix.rid }}
-      CASES: "native-nanoda-1,native-nanoda-4,native-conron-1,native-conron,wasm-nanoda,wasm-conron,wasm-nanoda-epoch,wasm-conron-epoch,wasm-nanoda-fuel,wasm-conron-fuel,wasm-nanoda-stack,wasm-conron-stack,wasm-nanoda-memcap,wasm-nanoda-fuelcap,wasm-nanoda-escape,wasm-nanoda-escape-abs"
+      CASES: "wasm-conron-big,wasm-conron-big-async,wasm-nanoda-threads-1,wasm-nanoda-threads-4,native-nanoda-1,native-nanoda-4,native-conron-1,native-conron,wasm-nanoda,wasm-conron,wasm-nanoda-epoch,wasm-conron-epoch,wasm-nanoda-fuel,wasm-conron-fuel,wasm-nanoda-stack,wasm-conron-stack,wasm-nanoda-memcap,wasm-nanoda-fuelcap,wasm-nanoda-escape,wasm-nanoda-escape-abs"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -189,14 +195,14 @@ jobs:
         run: |
           OWN=""
           if [ "${{ matrix.rid }}" = linux-x64 ]; then OWN="--native-nanoda wasm-kernels/nanoda-native-linux-x64 --native-conron wasm-kernels/con-ron-native-linux-x64"; chmod +x wasm-kernels/*-native-linux-x64; CASES="$CASES,own-native-nanoda-1,own-native-conron-1"; fi
-          python "$PF2/wasm/wasm.py" run --wasmtime "$WASMTIME" --root "$PIN_ROOT" --export "$PF0_WORK/r1/solution.ndjson" --nanoda wasm-kernels/nanoda.wasm --conron wasm-kernels/con-ron.wasm --cases "$CASES" --out "$OUT/r1.json" --cap-min 40 --label "R1-${{ matrix.rid }}" $OWN
+          python "$PF2/wasm/wasm.py" run --wasmtime "$WASMTIME" --root "$PIN_ROOT" --export "$PF0_WORK/r1/solution.ndjson" --nanoda wasm-kernels/nanoda.wasm --conron wasm-kernels/con-ron.wasm --conron-big wasm-kernels/con-ron-512.wasm --nanoda-threads wasm-kernels/nanoda-threads.wasm --cases "$CASES" --out "$OUT/r1.json" --cap-min 40 --label "R1-${{ matrix.rid }}" $OWN
       - name: The compact RH/GRH export in wasm (linux-x64)
         if: ${{ matrix.rid == 'linux-x64' }}
         timeout-minutes: 300
         run: |
           rm -rf "$PF0_WORK/r1"
           python "$PF2/grh.py" fetch --what compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
-          python "$PF2/wasm/wasm.py" run --wasmtime "$WASMTIME" --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --nanoda wasm-kernels/nanoda.wasm --conron wasm-kernels/con-ron.wasm --cases wasm-nanoda,wasm-conron --out "$OUT/compact.json" --cap-min 120 --label "compact-linux-x64"
+          python "$PF2/wasm/wasm.py" run --wasmtime "$WASMTIME" --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --nanoda wasm-kernels/nanoda.wasm --conron wasm-kernels/con-ron.wasm --conron-big wasm-kernels/con-ron-512.wasm --nanoda-threads wasm-kernels/nanoda-threads.wasm --cases wasm-nanoda,wasm-conron-big,wasm-nanoda-threads-4 --out "$OUT/compact.json" --cap-min 120 --label "compact-linux-x64"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() }}
         with:

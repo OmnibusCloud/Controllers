@@ -16,6 +16,8 @@ processes. Cases:
   wasm-nanoda-fuelcap                         a fuel budget far too small: must trap
   wasm-nanoda-escape                          the config names a host file outside /job: must fail
   wasm-nanoda-stack, wasm-conron-stack        with a larger wasm stack (64 MiB)
+  wasm-conron-big, wasm-conron-big-async      con-ron linked with a 512 MiB shadow stack, a 256 MiB wasm stack
+  wasm-nanoda-threads-1, wasm-nanoda-threads-4    nanoda for wasm32-wasip1-threads under wasi-threads
 """
 from __future__ import annotations
 
@@ -54,6 +56,8 @@ def main() -> int:
     parser.add_argument("--cap-min", type=float, default=60)
     parser.add_argument("--memory-gib", type=float, default=0)
     parser.add_argument("--label", default="")
+    parser.add_argument("--conron-big", default="", help="con-ron linked with a larger shadow stack (optional)")
+    parser.add_argument("--nanoda-threads", default="", help="nanoda for wasm32-wasip1-threads (optional)")
     parser.add_argument("--native-nanoda", default="", help="a native build of the same source (optional)")
     parser.add_argument("--native-conron", default="", help="a native build of the same source (optional)")
     options = parser.parse_args()
@@ -65,6 +69,10 @@ def main() -> int:
     options.wasmtime = os.path.abspath(options.wasmtime)
     if options.native_nanoda:
         options.native_nanoda = os.path.abspath(options.native_nanoda)
+    if options.conron_big:
+        options.conron_big = os.path.abspath(options.conron_big)
+    if options.nanoda_threads:
+        options.nanoda_threads = os.path.abspath(options.nanoda_threads)
     if options.native_conron:
         options.native_conron = os.path.abspath(options.native_conron)
     job = os.path.dirname(export)
@@ -78,6 +86,7 @@ def main() -> int:
     nanoda_config(os.path.join(job, "pf2-native-1.json"), export, 1)
     nanoda_config(os.path.join(job, "pf2-native-4.json"), export, 4)
     nanoda_config(os.path.join(job, "pf2-wasm.json"), guest, 1)
+    nanoda_config(os.path.join(job, "pf2-wasm-4.json"), guest, 4)
     # A config whose export path leaves the preopened folder: the guest must not reach it.
     outside = os.path.join(os.path.dirname(job), "pf2-outside-secret.txt")
     with open(outside, "w", encoding="utf-8") as handle:
@@ -104,6 +113,14 @@ def main() -> int:
         "wasm-conron-epoch": wt + ["-W", f"timeout={int(options.cap_min * 60)}s", options.conron, "--jobs=1", guest],
         "wasm-conron-stack": wt + ["-W", "max-wasm-stack=67108864", options.conron, "--jobs=1", guest],
     }
+    if options.conron_big:
+        big = ["-W", "max-wasm-stack=268435456"]
+        cases["wasm-conron-big"] = wt + big + [options.conron_big, "--jobs=1", guest]
+        cases["wasm-conron-big-async"] = wt + big + ["-W", "async-stack-size=285212672", options.conron_big, "--jobs=1", guest]
+    if options.nanoda_threads:
+        threads = ["-W", "threads=y", "-W", "shared-memory=y", "-S", "threads=y"]
+        cases["wasm-nanoda-threads-1"] = wt + threads + [options.nanoda_threads, "/job/pf2-wasm.json"]
+        cases["wasm-nanoda-threads-4"] = wt + threads + [options.nanoda_threads, "/job/pf2-wasm-4.json"]
     if options.native_nanoda:
         cases["own-native-nanoda-1"] = [options.native_nanoda, os.path.join(job, "pf2-native-1.json")]
     if options.native_conron:
