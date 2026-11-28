@@ -102,8 +102,18 @@ def wrap(mode: str, cmd: list, root: str, job: str, probe: bool = False) -> list
                 "--ro-bind", root, root, "--bind", job, job, "--chdir", job,
                 "--setenv", "PATH", f"{root}/bin:/usr/bin", "--setenv", "HOME", job, "--setenv", "LEAN_ABORT_ON_PANIC", "1"]
         return argv + ["--"] + cmd
+    if mode == "bwrap-lake":
+        # The arguments of Lake 4.36.0's own sandbox (Lake/CLI/Check.lean, buildSandboxArgs): the
+        # host's file system read-only, the home folders, /run/user and /tmp covered, the environment
+        # cleared, the readable and writable paths bound back, no network.
+        return ["bwrap", "--ro-bind", "/", "/", "--tmpfs", "/home", "--tmpfs", "/root", "--tmpfs", "/run/user",
+                "--tmpfs", "/tmp", "--dir", "/tmp/home", "--dev", "/dev", "--proc", "/proc", "--clearenv",
+                "--ro-bind", root, root, "--bind", job, job,
+                "--setenv", "PATH", f"{root}/bin:/usr/bin:/bin", "--setenv", "HOME", "/tmp/home",
+                "--unshare-all", "--die-with-parent", "--new-session", "--chdir", job, "--"] + cmd
     if mode == "bwrap-host-ro":
-        # What `lake comparator` runs its kernels in: the host's whole file system read-only.
+        # The host's whole file system read-only, nothing covered, the environment inherited: what
+        # PF-2's isolation runs took for comparator's sandbox (Lake 4.36.0 covers more: bwrap-lake).
         return ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
                 "--bind", job, job, "--unshare-all", "--die-with-parent", "--chdir", job, "--"] + cmd
     if mode == "sandbox-exec":

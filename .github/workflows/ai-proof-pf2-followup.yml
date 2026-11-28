@@ -214,7 +214,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { rid: linux-x64, os: ubuntu-24.04, modes: "raw,bwrap,bwrap-host-ro" }
+          - { rid: linux-x64, os: ubuntu-24.04, modes: "raw,bwrap,bwrap-lake,bwrap-host-ro" }
           - { rid: osx-arm64, os: macos-15, modes: "raw,sandbox-exec,sandbox-exec+clearenv" }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
