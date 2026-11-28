@@ -85,9 +85,11 @@ jobs:
           Copy-Item "$env:PF2\isolation\spawn.lean" $job
           # At the first break: ignore every child's initial breakpoint; at each new process, a
           # breakpoint on CreateProcessInternalW that prints the caller and traces the call to its end.
+          # (An event's command string takes backslashes as escapes: the path goes with forward slashes.)
+          $dbgf = $dbg -replace '\\', '/'
           @"
           sxi ibp
-          sxe -c "`$`$<$dbg\cpr.txt" cpr
+          sxe -c "`$`$<$dbgf/cpr.txt" cpr
           g
           "@ | Out-File "$dbg\init.txt" -Encoding ascii
           @'

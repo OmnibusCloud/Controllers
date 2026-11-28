@@ -1,1 +1,2 @@
 cdb: run 1 (2026-11-28): the Lean program's child starts traced under cdb in the AppContainer and in the Job alone
+cdb: run 2 (2026-11-28): the per-process command file named with forward slashes (run 1: an event's command string read the backslashes as escapes)
