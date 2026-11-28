@@ -1,0 +1,123 @@
+name: AI Proof PF-2 the failing start under a debugger
+run-name: "AI Proof PF-2 the failing start under a debugger: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), follow-up of 2026-11-28, L-32: inside the AppContainer on a
+# hosted Windows runner every child start of a Lean program fails with "access is denied (5)" before
+# the program is even looked up (no file event in Process Monitor), while the same CreateProcessA call
+# made by a .NET process in the same container succeeds (runs 46111448122, 46112579046). Here the
+# Lean program runs under the Windows SDK's console debugger (cdb, child processes debugged too): a
+# breakpoint on KERNELBASE!CreateProcessInternalW traces each start to its return (wt, one level
+# down, every callee's return value), inside the AppContainer and, for comparison, in the Job Object
+# alone, where the starts succeed. Symbols from Microsoft's public symbol server. Nothing is
+# published. A run starts when pf2/run/cdb.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/cdb.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf2-cdb-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows:
+    name: windows-2022
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      OUT: results-cdb-windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain, the prototype, our which
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid win-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          dotnet publish "$PF2/isolation/appcontainer/Pf2Sandbox.csproj" -c Release -o "$PF0_WORK/sandbox" -nologo -v q
+          dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$PF0_WORK/which" -nologo -v q
+          echo "SANDBOX=$PF0_WORK/sandbox/Pf2Sandbox.exe" >> "$GITHUB_ENV"
+          echo "WHICH_DIR=$PF0_WORK/which" >> "$GITHUB_ENV"
+      - name: The Lean program's child starts under cdb, in the AppContainer and in the Job alone
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
+          if (-not (Test-Path $cdb)) {
+            $cdb = Get-ChildItem 'C:\Program Files (x86)\Windows Kits' -Recurse -Filter cdb.exe -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -like '*x64*' } | Select-Object -First 1 -ExpandProperty FullName
+          }
+          "cdb: $cdb" | Out-File "$env:OUT\cdb.txt" -Encoding utf8
+          if (-not $cdb) { "no cdb on this image" | Out-File "$env:OUT\cdb.txt" -Append -Encoding utf8; exit 0 }
+          $work = $env:PF0_WORK -replace '/', '\'
+          $root = $env:PIN_ROOT -replace '/', '\'
+          $which = $env:WHICH_DIR -replace '/', '\'
+          $sandbox = $env:SANDBOX -replace '/', '\'
+          $dbg = "$work\dbg"; New-Item -ItemType Directory -Force $dbg | Out-Null
+          $job = "$work\spawn-job"; New-Item -ItemType Directory -Force $job | Out-Null
+          Copy-Item "$env:PF2\isolation\spawn.lean" $job
+          # At the first break: ignore every child's initial breakpoint; at each new process, a
+          # breakpoint on CreateProcessInternalW that prints the caller and traces the call to its end.
+          @"
+          sxi ibp
+          sxe -c "`$`$<$dbg\cpr.txt" cpr
+          g
+          "@ | Out-File "$dbg\init.txt" -Encoding ascii
+          @'
+          bu KERNELBASE!CreateProcessInternalW "kb 4; wt -l 2 -oR"
+          g
+          '@ | Out-File "$dbg\cpr.txt" -Encoding ascii
+          ((1..400 | ForEach-Object { 'g' }) + 'q') | Out-File "$dbg\go.txt" -Encoding ascii
+          $git = if (Test-Path 'C:\Program Files\Git\ucrt64\bin\git.exe') { 'C:\Program Files\Git\ucrt64\bin' } else { Split-Path (Get-Command git).Source }
+          $wp = "$root\bin;$which;$git;C:\Windows\System32"
+          foreach ($variant in 'container', 'job') {
+            $extra = if ($variant -eq 'job') { '--no-container' } else { '' }
+            $arguments = "-o -G -y `"srv*$work\sym*https://msdl.microsoft.com/download/symbols`" -c `"`$`$<$dbg\init.txt`" " +
+              "`"$sandbox`" run --name pf2-spawn --job-dir `"$job`" --grant-read `"$root`" --grant-read `"$which`" --processes 16 $extra " +
+              "--env `"PATH=$wp`" -- `"$root\bin\lean.exe`" --run spawn.lean `"$which\which.exe`""
+            $arguments | Out-File "$env:OUT\cdb.txt" -Append -Encoding utf8
+            $clock = [System.Diagnostics.Stopwatch]::StartNew()
+            Start-Process -FilePath $cdb -ArgumentList $arguments -RedirectStandardInput "$dbg\go.txt" `
+              -RedirectStandardOutput "$env:OUT\cdb-$variant.txt" -RedirectStandardError "$env:OUT\cdb-$variant-stderr.txt" -Wait -NoNewWindow
+            "$variant took $([math]::Round($clock.Elapsed.TotalSeconds, 1)) s" | Out-File "$env:OUT\cdb.txt" -Append -Encoding utf8
+            Select-String -Path "$env:OUT\cdb-$variant.txt" -Pattern 'CreateProcessInternalW|NtCreateUserProcess|c0000022|spawn ' | Select-Object -First 60 | ForEach-Object { $_.Line }
+          }
+      - name: Remove the AppContainer profile
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$PF0_WORK/empty"
+          "$SANDBOX" cleanup --name pf2-spawn --job-dir "$PF0_WORK/empty" >> "$OUT/cleanup.txt" 2>&1 || true
+          cat "$OUT/cleanup.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-cdb-windows-2022
+          path: results-cdb-windows-2022
+          retention-days: 14
