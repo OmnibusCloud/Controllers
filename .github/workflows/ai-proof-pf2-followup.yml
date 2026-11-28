@@ -13,6 +13,11 @@ run-name: "AI Proof PF-2 follow-up: ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "all, windows or unix: the jobs to run"
+        required: false
+        default: all
   push:
     branches:
       - spike/proof-pf2
@@ -24,7 +29,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: ai-proof-pf2-followup-${{ github.ref }}
+  group: ai-proof-pf2-followup-${{ github.ref }}-${{ inputs.only || 'all' }}
   cancel-in-progress: false
 
 env:
@@ -42,6 +47,7 @@ defaults:
 jobs:
   windows:
     name: win-x64
+    if: ${{ (inputs.only || 'all') != 'unix' }}
     runs-on: windows-2022
     timeout-minutes: 150
     env:
@@ -203,6 +209,7 @@ jobs:
 
   unix:
     name: ${{ matrix.rid }}
+    if: ${{ (inputs.only || 'all') != 'windows' }}
     strategy:
       fail-fast: false
       matrix:
@@ -236,8 +243,9 @@ jobs:
       - name: Escape probes
         timeout-minutes: 20
         run: |
-          files=$(find / -xdev -maxdepth 6 \( -name '.credentials*' -o -name '.runner' \) -type f 2>/dev/null | head -10 | tr '\n' ';')
-          echo "runner files found: $(echo "$files" | tr ';' '\n' | grep -c .)" > "$OUT/runner-files.txt"
+          # find exits 1 on the folders it may not read; that is not a failure here.
+          files=$({ find / -xdev -maxdepth 6 \( -name '.credentials*' -o -name '.runner' \) -type f 2>/dev/null || true; } | head -10 | tr '\n' ';')
+          echo "runner files found: $(echo "$files" | tr ';' '\n' | grep -c . || true)" > "$OUT/runner-files.txt"
           PF2_RUNNER_FILES="$files" python "$PF2/isolation/escape.py" --probe "$PF0_WORK/probe/pf2probe" --modes "${{ matrix.modes }}" --work "$PF0_WORK/escape" --out "$OUT/escape.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() }}

@@ -11,6 +11,11 @@ run-name: "AI Proof PF-2 slicer at RH size: ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "all or times: times runs the profile and the slices cut by its times only"
+        required: false
+        default: all
   push:
     branches:
       - spike/proof-pf2
@@ -21,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ai-proof-pf2-slicer-${{ github.ref }}
+  group: ai-proof-pf2-slicer-${{ github.ref }}-${{ inputs.only || 'all' }}
   cancel-in-progress: false
 
 env:
@@ -71,7 +76,7 @@ jobs:
           mkdir -p weights
           # The driver links the toolchain's shared libraries; the scope passes LD_LIBRARY_PATH on.
           export LD_LIBRARY_PATH="$PIN_ROOT/lib/lean:$PIN_ROOT/lib:${LD_LIBRARY_PATH:-}"
-          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --steps driver-profile --driver "$DRIVER" --weights-out weights/times.tsv --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 190 --stack-unlimited --label profile
+          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --steps driver-profile --driver "$DRIVER" --weights-out "$(pwd)/weights/times.tsv" --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 190 --stack-unlimited --label profile
           echo "$(date +%s)" > "$OUT/job-end.txt"
           wc -l weights/times.tsv
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -143,6 +148,7 @@ jobs:
 
   slice-count:
     name: slice ${{ matrix.index }} of 4 (by block count)
+    if: ${{ (inputs.only || 'all') != 'times' }}
     strategy:
       fail-fast: false
       matrix:
