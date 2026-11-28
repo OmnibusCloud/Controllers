@@ -64,6 +64,7 @@ jobs:
           dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$PF0_WORK/which" -nologo -v q
           echo "SANDBOX=$PF0_WORK/sandbox/Pf2Sandbox.exe" >> "$GITHUB_ENV"
           echo "WHICH_DIR=$PF0_WORK/which" >> "$GITHUB_ENV"
+          dotnet publish "$PF2/isolation/probe/Pf2Probe.csproj" -c Release -r win-x64 -o "$PF0_WORK/probe" -nologo -v q
       - name: The Lean program's child starts under cdb, in the AppContainer and in the Job alone
         timeout-minutes: 30
         shell: pwsh
@@ -94,9 +95,12 @@ jobs:
           "@ | Out-File "$dbg\init.txt" -Encoding ascii
           @'
           bu KERNELBASE!CreateProcessInternalW "kb 4; wt -l 2 -oR"
+          bu KERNELBASE!CreatePipe "kb 4; wt -l 3 -oR"
+          bu KERNELBASE!CreateFileA ".if (dwo(@rcx) == 0x004c554e) { kb 4; wt -l 4 -oR } .else { gc }"
           g
           '@ | Out-File "$dbg\cpr.txt" -Encoding ascii
-          ((1..400 | ForEach-Object { 'g' }) + 'q') | Out-File "$dbg\go.txt" -Encoding ascii
+          # After each traced call the thread's last error and status, then on.
+          ((1..400 | ForEach-Object { '!gle'; 'g' }) + 'q') | Out-File "$dbg\go.txt" -Encoding ascii
           $git = if (Test-Path 'C:\Program Files\Git\ucrt64\bin\git.exe') { 'C:\Program Files\Git\ucrt64\bin' } else { Split-Path (Get-Command git).Source }
           $wp = "$root\bin;$which;$git;C:\Windows\System32"
           foreach ($variant in 'container', 'job') {
@@ -109,13 +113,18 @@ jobs:
             Start-Process -FilePath $cdb -ArgumentList $arguments -RedirectStandardInput "$dbg\go.txt" `
               -RedirectStandardOutput "$env:OUT\cdb-$variant.txt" -RedirectStandardError "$env:OUT\cdb-$variant-stderr.txt" -Wait -NoNewWindow
             "$variant took $([math]::Round($clock.Elapsed.TotalSeconds, 1)) s" | Out-File "$env:OUT\cdb.txt" -Append -Encoding utf8
-            Select-String -Path "$env:OUT\cdb-$variant.txt" -Pattern 'CreateProcessInternalW|NtCreateUserProcess|c0000022|spawn ' | Select-Object -First 60 | ForEach-Object { $_.Line }
+            Select-String -Path "$env:OUT\cdb-$variant.txt" -Pattern 'CreateProcessInternalW|CreatePipe|CreateFileA|NtCreateFile|LastErrorValue|LastStatusValue|c0000022' | Select-Object -First 80 | ForEach-Object { $_.Line }
           }
+      - name: The probe opens the null device and creates pipes, in the AppContainer
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes "raw,appcontainer" --work "$env:PF0_WORK\escape" --out "$env:OUT\escape.json" --sandbox $env:SANDBOX
       - name: Remove the AppContainer profile
         if: ${{ always() }}
         run: |
           mkdir -p "$PF0_WORK/empty"
-          "$SANDBOX" cleanup --name pf2-spawn --job-dir "$PF0_WORK/empty" >> "$OUT/cleanup.txt" 2>&1 || true
+          for name in pf2-spawn pf2-probe-kernel; do "$SANDBOX" cleanup --name "$name" --job-dir "$PF0_WORK/empty" >> "$OUT/cleanup.txt" 2>&1 || true; done
           cat "$OUT/cleanup.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() }}

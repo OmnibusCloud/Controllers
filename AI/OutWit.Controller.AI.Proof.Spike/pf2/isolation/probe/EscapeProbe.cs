@@ -311,6 +311,14 @@ public sealed class EscapeProbe
             var index = i;
             Check($"start cmd.exe {ProcessVariants.NAMES[index]}", () => ProcessVariants.Run(index));
         }
+        // The null device, which Lean's runtime opens for a child's standard input (stdin := .null,
+        // as IO.Process.output does).
+        m_results.Add(("the null device: security descriptor", "info", NullDevice.Descriptor()));
+        for (var i = 0; i < NullDevice.VARIANTS.Length; i++)
+        {
+            var index = i;
+            Check(NullDevice.VARIANTS[index].Name, () => NullDevice.Open(index));
+        }
     }
 
     private static string Pipe(string? sddl)
