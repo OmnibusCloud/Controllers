@@ -10,7 +10,8 @@ listener on 127.0.0.1, a Unix socket in the folder beside the job folder (Linux,
 pipe (Windows), this script's own process id as the "host process", the job's GITHUB_ENV file, and
 the runner's own files the workflow found (PF2_RUNNER_FILES, separated by ';').
 Modes: raw; linux: bwrap, bwrap-host-ro; macos: sandbox-exec; windows: job, appcontainer,
-appcontainer-nochildren.
+appcontainer-nochildren. A mode with the suffix `+clearenv` starts the launcher with a minimal
+environment (PATH, HOME and TMPDIR only) instead of this script's.
 """
 from __future__ import annotations
 
@@ -146,17 +147,24 @@ def main() -> int:
             os.remove(out_file)
         before = (tcp_seen[0], unix_seen[0], pipe_seen[0])
         cmd = [probe] + args + ["--out", out_file]
-        if IS_WINDOWS and mode != "raw":
+        env = None
+        base = mode
+        if mode.endswith("+clearenv"):
+            base = mode[:-len("+clearenv")]
+            env = {"PATH": "/usr/bin:/bin" if not IS_WINDOWS else os.environ.get("PATH", ""), "HOME": job, "TMPDIR": job}
+            if IS_WINDOWS:
+                env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", r"C:\Windows")
+        if IS_WINDOWS and base != "raw":
             argv = [options.sandbox, "run", "--name", "pf2-probe-kernel", "--job-dir", job, "--grant-read", probe_dir,
                     "--wall-s", "120", "--processes", "8", "--console", "detached"]
-            if mode == "job":
+            if base == "job":
                 argv.append("--no-container")
-            if mode == "appcontainer-nochildren":
+            if base == "appcontainer-nochildren":
                 argv.append("--no-children")
             argv += ["--"] + cmd
         else:
-            argv = isolation.wrap(mode, cmd, probe_dir, job)
-        done = subprocess.run(argv, capture_output=True, text=True, timeout=300)
+            argv = isolation.wrap(base, cmd, probe_dir, job)
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=300, env=env)
         row = {"exit": done.returncode, "launcher": (done.stdout + done.stderr)[-1500:]}
         try:
             with open(out_file, encoding="utf-8") as handle:

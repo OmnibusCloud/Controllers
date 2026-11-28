@@ -71,7 +71,17 @@ public sealed class EscapeProbe
         json.WriteString("probe", "pf2probe");
         json.WriteString("os", System.Runtime.InteropServices.RuntimeInformation.OSDescription);
         json.WriteNumber("pid", System.Environment.ProcessId);
-        json.WriteString("user", System.Environment.UserName);
+        // Inside a sandbox without /etc/passwd the user's name cannot be looked up.
+        string user;
+        try
+        {
+            user = System.Environment.UserName;
+        }
+        catch (IOException error)
+        {
+            user = "unknown (" + error.GetType().Name + ")";
+        }
+        json.WriteString("user", user);
         json.WriteStartArray("checks");
         foreach (var (name, result, detail) in m_results)
         {
