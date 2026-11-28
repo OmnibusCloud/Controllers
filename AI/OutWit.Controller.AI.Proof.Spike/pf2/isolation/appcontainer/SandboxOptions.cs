@@ -35,6 +35,7 @@ public sealed class SandboxOptions
                 case "--stderr": options.StderrPath = Path.GetFullPath(Value()); break;
                 case "--env": options.Environment.Add(Value()); break;
                 case "--outside-dir": options.OutsideDir = Path.GetFullPath(Value()); break;
+                case "--console": options.Console = Value(); break;
                 case "--": options.Command.AddRange(args.Skip(i + 1)); i = args.Count; break;
                 default: throw new ArgumentException($"unknown option {args[i]}");
             }
@@ -84,6 +85,13 @@ public sealed class SandboxOptions
 
     /// <summary>For <c>probe</c>: a folder outside the job's, with a file the probe must not read.</summary>
     public string? OutsideDir { get; private set; }
+
+    /// <summary>
+    /// The console the process gets: <c>detached</c> (none; a console child then needs a console of its
+    /// own), <c>hidden</c> (a console without a window, inherited by children) or <c>new</c> (a new,
+    /// hidden console window).
+    /// </summary>
+    public string Console { get; private set; } = "detached";
 
     /// <summary>The command and its arguments.</summary>
     public List<string> Command { get; } = [];

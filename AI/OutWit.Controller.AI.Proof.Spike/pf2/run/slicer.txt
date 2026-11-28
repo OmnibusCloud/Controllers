@@ -1,0 +1,1 @@
+slicer: run 1 (2026-11-28): the compact export profiled, cut into 2 and 4 slices by times and into 4 by count, each slice on its own runner

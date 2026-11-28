@@ -15,6 +15,9 @@ internal static class NativeMethods
     public const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
     public const uint CREATE_NO_WINDOW = 0x08000000;
     public const uint DETACHED_PROCESS = 0x00000008;
+    public const uint CREATE_NEW_CONSOLE = 0x00000010;
+    public const int STARTF_USESHOWWINDOW = 0x00000001;
+    public const short SW_HIDE = 0;
     public const uint BELOW_NORMAL_PRIORITY_CLASS = 0x00004000;
     public const int STARTF_USESTDHANDLES = 0x00000100;
 

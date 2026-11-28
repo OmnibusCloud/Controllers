@@ -1,0 +1,186 @@
+name: AI Proof PF-2 slicer at RH size
+run-name: "AI Proof PF-2 slicer at RH size: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), follow-up of 2026-11-28: PF-1's slicer (ProofDriver) on the
+# compact RH/GRH export. A profiling job replays the whole closure with Lean's kernel, every block
+# timed (the monolithic run); then the closure is cut into 2 and into 4 contiguous slices by those
+# times, each slice on a runner of its own; and into 4 slices by block count, started at once
+# (no profile needed). Every run in a 13 GiB systemd scope on a 16 GB runner. The block times travel
+# to the slice jobs as a one-day artifact of this run; nothing is published. A run starts when
+# pf2/run/slicer.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/slicer.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-proof-pf2-slicer-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+  PF1_CGROUP: "1"
+  CAP_GIB: 13
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  profile:
+    name: profile (the monolithic run)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      OUT: results-slicer-profile
+    steps:
+      - name: Start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          echo "$JOB_START" > "$OUT/job-start.txt"
+      - name: Toolchain and driver
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          python "$PF1/lean.py" driver --root "$ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+      - name: Fetch
+        timeout-minutes: 60
+        run: python "$PF2/grh.py" fetch --what compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Profile
+        timeout-minutes: 200
+        run: |
+          mkdir -p weights
+          # The driver links the toolchain's shared libraries; the scope passes LD_LIBRARY_PATH on.
+          export LD_LIBRARY_PATH="$PIN_ROOT/lib/lean:$PIN_ROOT/lib:${LD_LIBRARY_PATH:-}"
+          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --steps driver-profile --driver "$DRIVER" --weights-out weights/times.tsv --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 190 --stack-unlimited --label profile
+          echo "$(date +%s)" > "$OUT/job-end.txt"
+          wc -l weights/times.tsv
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: slicer-weights
+          path: weights
+          retention-days: 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-slicer-profile
+          path: results-slicer-profile
+          retention-days: 14
+
+  slice:
+    name: slice ${{ matrix.index }} of ${{ matrix.k }} (${{ matrix.by }})
+    needs: profile
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { k: 2, index: 0, by: times }
+          - { k: 2, index: 1, by: times }
+          - { k: 4, index: 0, by: times }
+          - { k: 4, index: 1, by: times }
+          - { k: 4, index: 2, by: times }
+          - { k: 4, index: 3, by: times }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      OUT: results-slicer-${{ matrix.k }}-${{ matrix.index }}-${{ matrix.by }}
+    steps:
+      - name: Start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          echo "$JOB_START" > "$OUT/job-start.txt"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: slicer-weights
+          path: weights
+      - name: Toolchain and driver
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          python "$PF1/lean.py" driver --root "$ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+      - name: Fetch
+        timeout-minutes: 60
+        run: python "$PF2/grh.py" fetch --what compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Slice
+        timeout-minutes: 200
+        run: |
+          # The driver links the toolchain's shared libraries; the scope passes LD_LIBRARY_PATH on.
+          export LD_LIBRARY_PATH="$PIN_ROOT/lib/lean:$PIN_ROOT/lib:${LD_LIBRARY_PATH:-}"
+          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --steps driver-slice-${{ matrix.k }}-${{ matrix.index }} --driver "$DRIVER" --weights "$(pwd)/weights/times.tsv" --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 190 --stack-unlimited --label "slice-${{ matrix.k }}-${{ matrix.index }}-${{ matrix.by }}"
+          echo "$(date +%s)" > "$OUT/job-end.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-slicer-${{ matrix.k }}-${{ matrix.index }}-${{ matrix.by }}
+          path: results-slicer-${{ matrix.k }}-${{ matrix.index }}-${{ matrix.by }}
+          retention-days: 14
+
+  slice-count:
+    name: slice ${{ matrix.index }} of 4 (by block count)
+    strategy:
+      fail-fast: false
+      matrix:
+        index: [0, 1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      OUT: results-slicer-4-${{ matrix.index }}-count
+    steps:
+      - name: Start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+          echo "$JOB_START" > "$OUT/job-start.txt"
+      - name: Toolchain and driver
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid linux-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          ROOT=$(python -c "import json; print(json.load(open('$OUT/toolchain.json'))['root'])")
+          python "$PF1/lean.py" driver --root "$ROOT" --dest "$PF0_WORK/driver" --record "$OUT/driver-build.json" --env-name DRIVER
+      - name: Fetch
+        timeout-minutes: 60
+        run: python "$PF2/grh.py" fetch --what compact --dest "$PF0_WORK/grh" --out "$OUT/fetch.json"
+      - name: Slice
+        timeout-minutes: 200
+        run: |
+          # The driver links the toolchain's shared libraries; the scope passes LD_LIBRARY_PATH on.
+          export LD_LIBRARY_PATH="$PIN_ROOT/lib/lean:$PIN_ROOT/lib:${LD_LIBRARY_PATH:-}"
+          python "$PF2/grh.py" run --root "$PIN_ROOT" --export "$PF0_WORK/grh/compact-solution.ndjson" --steps driver-slice-4-${{ matrix.index }} --driver "$DRIVER" --out "$OUT/run.json" --memory-gib "$CAP_GIB" --cap-min 190 --stack-unlimited --label "slice-4-${{ matrix.index }}-count"
+          echo "$(date +%s)" > "$OUT/job-end.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-slicer-4-${{ matrix.index }}-count
+          path: results-slicer-4-${{ matrix.index }}-count
+          retention-days: 14

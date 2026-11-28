@@ -1,0 +1,247 @@
+name: AI Proof PF-2 follow-up
+run-name: "AI Proof PF-2 follow-up: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), the follow-up of 2026-11-28, on hosted runners only:
+# (1) why lake comparator starts no child process inside the AppContainer on the hosted Windows
+#     runner: the failing start traced (Process Monitor; a Lean program that starts a child the way
+#     Lake does and prints the error), the container's console in three forms, then the comparator
+#     tree on kit R1 inside the AppContainer, timed;
+# (3) escape probes: a probe run as the "kernel" outside (the control) and inside each sandbox;
+# (4) the AppContainer's network with the firewall's profiles off (and an attempt to stop its
+#     services) on the hosted Windows runner.
+# Nothing is published. A run starts when pf2/run/followup.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/followup.txt'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ai-proof-pf2-followup-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows:
+    name: win-x64
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      OUT: results-followup-win-x64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain, the prototype, our which, the probe
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid win-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          dotnet publish "$PF2/isolation/appcontainer/Pf2Sandbox.csproj" -c Release -o "$PF0_WORK/sandbox" -nologo -v q
+          dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$PF0_WORK/which" -nologo -v q
+          dotnet publish "$PF2/isolation/probe/Pf2Probe.csproj" -c Release -r win-x64 -o "$PF0_WORK/probe" -nologo -v q
+          ls -la "$PF0_WORK/probe" "$PF0_WORK/which"
+          echo "SANDBOX=$PF0_WORK/sandbox/Pf2Sandbox.exe" >> "$GITHUB_ENV"
+          echo "WHICH_DIR=$PF0_WORK/which" >> "$GITHUB_ENV"
+      - name: Kit R1 (PF-1's export and challenge)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(python "$PF2/grh.py" pin R1_KIT_RUN)
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name kit-R1 --dir kit
+          python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, os.environ["PF1"])
+          from common import decompress
+          job = os.path.join(os.environ["PF0_WORK"], "job")
+          os.makedirs(job, exist_ok=True)
+          for name in ("solution", "challenge"):
+              print(name, decompress(f"kit/{name}.ndjson.zst", os.path.join(job, f"{name}.ndjson")))
+          EOF
+          rm -rf kit
+      - name: The session, the user, the firewall
+        shell: pwsh
+        run: |
+          $o = "$env:OUT\session.txt"
+          "session id: $([System.Diagnostics.Process]::GetCurrentProcess().SessionId)" | Out-File $o -Encoding utf8
+          "interactive: $([Environment]::UserInteractive)" | Out-File $o -Append -Encoding utf8
+          whoami /all | Out-File $o -Append -Encoding utf8
+          netsh advfirewall show allprofiles state | Out-File $o -Append -Encoding utf8
+          Get-Service mpssvc, bfe | Format-Table -AutoSize | Out-String | Out-File $o -Append -Encoding utf8
+          Get-Content $o | Select-Object -First 20
+      # (1) The failing start, traced. Process Monitor records every file, registry and process event
+      # while a Lean program starts children inside the container and while comparator tries to.
+      - name: Process Monitor
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://download.sysinternals.com/files/ProcessMonitor.zip -OutFile "$env:PF0_WORK\pm.zip"
+          Expand-Archive "$env:PF0_WORK\pm.zip" -DestinationPath "$env:PF0_WORK\pm"
+          (Get-FileHash "$env:PF0_WORK\pm\Procmon64.exe" -Algorithm SHA256).Hash | Out-File "$env:OUT\procmon-sha256.txt"
+      - name: Starting children inside the AppContainer (three consoles), traced
+        timeout-minutes: 20
+        run: |
+          set +e
+          # Git Bash would rewrite arguments such as /c and /Terminate into paths.
+          export MSYS_NO_PATHCONV=1
+          J="$PF0_WORK/spawn-job"; mkdir -p "$J"; cp "$PF2/isolation/spawn.lean" "$J/"
+          GITDIR=$(cygpath -w "$(dirname "$(command -v git)")"); USRBIN=$(cygpath -w /usr/bin)
+          WP="$(cygpath -w "$PIN_ROOT/bin");$(cygpath -w "$WHICH_DIR");$GITDIR;$USRBIN;C:\\Windows\\System32"
+          echo "PATH for the container: $WP" > "$OUT/spawn.txt"
+          powershell -NoProfile -Command "Start-Process '$(cygpath -w "$PF0_WORK/pm/Procmon64.exe")' -ArgumentList '/AcceptEula','/Quiet','/Minimized','/BackingFile','$(cygpath -w "$PF0_WORK/trace.pml")'"
+          sleep 10
+          for console in detached hidden new; do
+            echo "=== console $console: lean --run spawn.lean" >> "$OUT/spawn.txt"
+            "$SANDBOX" run --name pf2-spawn --job-dir "$J" --grant-read "$PIN_ROOT" --grant-read "$WHICH_DIR" --processes 8 --console "$console" --env "PATH=$WP" --env "LEAN_ABORT_ON_PANIC=1" -- "$(cygpath -w "$PIN_ROOT/bin/lean.exe")" --run spawn.lean which "$(cygpath -w "$WHICH_DIR/which.exe")" >> "$OUT/spawn.txt" 2>&1
+            echo "=== console $console: cmd /c which git" >> "$OUT/spawn.txt"
+            "$SANDBOX" run --name pf2-spawn --job-dir "$J" --grant-read "$WHICH_DIR" --processes 8 --console "$console" --env "PATH=$WP" -- "C:\\Windows\\System32\\cmd.exe" /c which git >> "$OUT/spawn.txt" 2>&1
+          done
+          THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
+          python "$PF2/isolation/isolation.py" kernels --mode appcontainer --root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels comparator --repeat 1 --out "$OUT/traced-comparator.json" --sandbox "$SANDBOX" --which-dir "$WHICH_DIR" --memory-gib 6 --cap-min 10
+          sleep 3
+          "$(cygpath -w "$PF0_WORK/pm/Procmon64.exe")" /Terminate
+          sleep 5
+          powershell -NoProfile -Command "Start-Process -Wait '$(cygpath -w "$PF0_WORK/pm/Procmon64.exe")' -ArgumentList '/AcceptEula','/Quiet','/OpenLog','$(cygpath -w "$PF0_WORK/trace.pml")','/SaveAs','$(cygpath -w "$PF0_WORK/trace.csv")'"
+          ls -la "$PF0_WORK"/trace.*
+          python - <<'EOF'
+          import csv, os, collections
+          src = os.path.join(os.environ["PF0_WORK"], "trace.csv")
+          out = os.path.join(os.environ["OUT"], "trace-filtered.csv")
+          names = {"lake.exe", "which.exe", "lean.exe", "cmd.exe", "conhost.exe", "leanchecker.exe", "Pf2Sandbox.exe"}
+          keep, counts = [], collections.Counter()
+          try:
+              with open(src, encoding="utf-8-sig", errors="replace", newline="") as handle:
+                  for row in csv.DictReader(handle):
+                      if row.get("Process Name") not in names:
+                          continue
+                      counts[(row.get("Process Name"), row.get("Result"))] += 1
+                      op, result = row.get("Operation", ""), row.get("Result", "")
+                      if result not in ("SUCCESS", "") or op.startswith("Process") or "Thread Create" in op:
+                          keep.append(row)
+          except FileNotFoundError:
+              print("no trace.csv")
+          with open(out, "w", encoding="utf-8", newline="") as handle:
+              if keep:
+                  w = csv.DictWriter(handle, fieldnames=list(keep[0].keys()))
+                  w.writeheader()
+                  w.writerows(keep[:20000])
+          print(len(keep), "rows kept")
+          for (name, result), n in counts.most_common(40):
+              print(f"{n:7} {name} {result}")
+          EOF
+          cat "$OUT/spawn.txt" | grep -E "===|spawn |stdout|stderr|exit_code|ending|start_error" | head -80
+          exit 0
+      - name: The comparator tree on R1 inside the AppContainer, three consoles, timed
+        timeout-minutes: 40
+        run: |
+          set +e
+          THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
+          for console in detached hidden new; do
+            python "$PF2/isolation/isolation.py" kernels --mode appcontainer --root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels comparator --repeat 2 --out "$OUT/comparator-consoles.json" --sandbox "$SANDBOX" --which-dir "$WHICH_DIR" --memory-gib 6 --cap-min 15 --console "$console"
+          done
+          python "$PF2/isolation/isolation.py" kernels --mode raw --root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels comparator --repeat 2 --out "$OUT/comparator-consoles.json" --memory-gib 6 --cap-min 15
+          exit 0
+      # (3) Escape probes, the firewall on.
+      - name: Escape probes
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path C:\, D:\ -Include .credentials*, .runner -Recurse -Depth 3 -Force -File -ErrorAction SilentlyContinue | Select-Object -First 10 -ExpandProperty FullName
+          "runner files found: $($files.Count)" | Out-File "$env:OUT\runner-files.txt"
+          $env:PF2_RUNNER_FILES = ($files -join ';')
+          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes raw,job,appcontainer,appcontainer-nochildren --work "$env:PF0_WORK\escape" --out "$env:OUT\escape.json" --sandbox $env:SANDBOX
+      # (4) The firewall's profiles off; then the same probes. The runner is thrown away after the job.
+      - name: The firewall off
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          $o = "$env:OUT\firewall-off.txt"
+          netsh advfirewall set allprofiles state off 2>&1 | Out-File $o -Encoding utf8
+          try { Stop-Service mpssvc -Force -ErrorAction Stop; "Stop-Service mpssvc: stopped" | Out-File $o -Append } catch { "Stop-Service mpssvc: $($_.Exception.Message)" | Out-File $o -Append }
+          sc.exe stop bfe 2>&1 | Out-File $o -Append -Encoding utf8
+          netsh advfirewall show allprofiles state 2>&1 | Out-File $o -Append -Encoding utf8
+          Get-Service mpssvc, bfe | Format-Table -AutoSize | Out-String | Out-File $o -Append -Encoding utf8
+          Get-Content $o
+          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes raw,appcontainer --work "$env:PF0_WORK\escape-off" --out "$env:OUT\escape-firewall-off.json" --sandbox $env:SANDBOX
+          & "$env:SANDBOX" probe --name pf2-probe-off --job-dir "$env:PF0_WORK\probe-off-job" --outside-dir "$env:PF0_WORK\probe-off-outside" | Out-File "$env:OUT\probe-firewall-off.json" -Encoding utf8
+          netsh advfirewall set allprofiles state on 2>&1 | Out-File $o -Append -Encoding utf8
+      - name: Remove the AppContainer profiles
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$PF0_WORK/empty"
+          for name in pf2-kernel pf2-spawn pf2-probe-kernel pf2-probe-off; do "$SANDBOX" cleanup --name "$name" --job-dir "$PF0_WORK/empty" >> "$OUT/cleanup.txt" 2>&1 || true; done
+          cat "$OUT/cleanup.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-followup-win-x64
+          path: results-followup-win-x64
+          retention-days: 14
+
+  unix:
+    name: ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04, modes: "raw,bwrap,bwrap-host-ro" }
+          - { rid: osx-arm64, os: macos-15, modes: "raw,sandbox-exec" }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      OUT: results-followup-${{ matrix.rid }}
+      PF2_SB_VARIANT: strict
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: bubblewrap
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get install -y -q bubblewrap clang zlib1g-dev
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: The probe
+        run: dotnet publish "$PF2/isolation/probe/Pf2Probe.csproj" -c Release -r ${{ matrix.rid }} -o "$PF0_WORK/probe" -nologo -v q && ls -la "$PF0_WORK/probe"
+      - name: Escape probes
+        timeout-minutes: 20
+        run: |
+          files=$(find / -xdev -maxdepth 6 \( -name '.credentials*' -o -name '.runner' \) -type f 2>/dev/null | head -10 | tr '\n' ';')
+          echo "runner files found: $(echo "$files" | tr ';' '\n' | grep -c .)" > "$OUT/runner-files.txt"
+          PF2_RUNNER_FILES="$files" python "$PF2/isolation/escape.py" --probe "$PF0_WORK/probe/pf2probe" --modes "${{ matrix.modes }}" --work "$PF0_WORK/escape" --out "$OUT/escape.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-followup-${{ matrix.rid }}
+          path: results-followup-${{ matrix.rid }}
+          retention-days: 14

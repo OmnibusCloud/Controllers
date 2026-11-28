@@ -118,9 +118,9 @@ def wrap(mode: str, cmd: list, root: str, job: str, probe: bool = False) -> list
 
 
 def windows_run(sandbox: str, mode: str, cmd: list, root: str, job: str, cap_min: float, memory_gib: float,
-                children: bool, which_dir: str = "") -> dict:
+                children: bool, which_dir: str = "", console: str = "detached") -> dict:
     argv = [sandbox, "run", "--job-dir", job, "--grant-read", root, "--wall-s", str(int(cap_min * 60)),
-            "--processes", "8", "--env", "LEAN_ABORT_ON_PANIC=1"]
+            "--processes", "8", "--env", "LEAN_ABORT_ON_PANIC=1", "--console", console]
     if memory_gib:
         argv += ["--memory-mb", str(int(memory_gib * 1024))]
     if mode == "job":
@@ -177,11 +177,12 @@ def kernels(options) -> int:
                 cmd = comparator_command(root, config, challenge, export, sandbox=False)
             else:
                 cmd = kernel_command(root, kernel, export, job)
-            key = f"{options.mode}/{kernel}/{attempt + 1}"
+            key = f"{options.mode}/{kernel}/{attempt + 1}" + (f"/{options.console}" if options.console != "detached" else "")
             print("---", key, flush=True)
             if options.mode.startswith("job") or options.mode.startswith("appcontainer"):
                 row = windows_run(options.sandbox, options.mode, cmd, root, job, options.cap_min, options.memory_gib,
-                                  children=kernel == "comparator", which_dir=options.which_dir)
+                                  children=kernel == "comparator", which_dir=options.which_dir,
+                                  console=options.console)
                 summary = {k: row.get(k) for k in ("ending", "exit_code", "wall_seconds", "peak_job_memory", "grant_seconds")}
             else:
                 run_env = dict(env)
@@ -286,6 +287,7 @@ def main() -> int:
     p.add_argument("--out", required=True)
     p.add_argument("--sandbox", default="")
     p.add_argument("--which-dir", default="", help="Windows: a folder with our own which.exe for lake comparator")
+    p.add_argument("--console", default="detached", help="Windows: detached, hidden or new (Pf2Sandbox --console)")
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--memory-gib", type=float, default=0)
     p.add_argument("--cap-min", type=float, default=30)

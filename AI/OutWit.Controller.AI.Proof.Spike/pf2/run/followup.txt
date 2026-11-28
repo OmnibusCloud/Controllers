@@ -1,0 +1,1 @@
+followup: run 1 (2026-11-28): the failing start in the AppContainer traced, three consoles, the comparator tree timed; escape probes on three OS; the firewall off

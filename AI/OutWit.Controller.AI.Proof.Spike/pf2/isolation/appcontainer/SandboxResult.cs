@@ -16,6 +16,9 @@ public sealed class SandboxResult
     /// <summary>Whether the AppContainer was a less-privileged one.</summary>
     public bool Lpac { get; init; }
 
+    /// <summary>The console the process was given (detached, hidden, new).</summary>
+    public string Console { get; init; } = "";
+
     /// <summary>The AppContainer's SID (null without a container).</summary>
     public string? ContainerSid { get; init; }
 

@@ -172,6 +172,17 @@ def precheck_dir(options) -> int:
     return 0
 
 
+def last_json_line(text: str):
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except ValueError:
+                return None
+    return None
+
+
 def parse_last_json(text: str):
     start = text.rfind('{"tool"')
     if start < 0:
@@ -338,6 +349,15 @@ def run(options) -> int:
             cmd = [options.leche_compare, "--compare", challenge, export]
         elif step == "ron-compare":
             cmd = [options.ron_compare, "--compare", challenge, export]
+        elif step == "driver-profile":
+            # PF-1's driver: the whole closure into an empty environment, every block timed.
+            cmd = [options.driver, "profile", export, "--out", options.weights_out or os.path.join(folder, "times.tsv")]
+        elif step.startswith("driver-slice-"):
+            # driver-slice-K-I: slice I of K contiguous slices, the earlier ones added unchecked.
+            k, i = step[len("driver-slice-"):].split("-")
+            cmd = [options.driver, "slice", export, "--slices", k, "--index", i]
+            if options.weights:
+                cmd += ["--weights", options.weights]
         elif step.startswith("con-leche-j"):
             # con-leche starts one worker per hardware thread unless told otherwise.
             cmd = [os.path.join(root, "bin", "con-leche" + (".exe" if sys.platform == "win32" else "")),
@@ -347,6 +367,8 @@ def run(options) -> int:
         row = run_tree(cmd, env=env, cwd=folder, timeout=cap, memory_gib=options.memory_gib or None,
                        guard_gib=options.guard_gib or None, stack_unlimited=options.stack_unlimited)
         row["command"] = " ".join(os.path.basename(c) if os.path.isabs(c) else c for c in cmd)
+        if step.startswith("driver-"):
+            row["result"] = last_json_line(row.get("stdout_tail", ""))
         record["steps"][step] = row
         print(json.dumps({k: row.get(k) for k in ("exit", "ending", "wall_s", "tree_rss", "scope_anon", "killed")}),
               (row.get("says") or "")[-400:], flush=True)
@@ -395,6 +417,9 @@ def main() -> int:
     p.add_argument("--leche-compare", default="")
     p.add_argument("--ron-compare", default="")
     p.add_argument("--stack-unlimited", action="store_true")
+    p.add_argument("--driver", default="", help="PF-1's ProofDriver (driver-profile, driver-slice-K-I)")
+    p.add_argument("--weights", default="", help="the block times a slice is cut by (driver-profile's output)")
+    p.add_argument("--weights-out", default="", help="where driver-profile writes the block times")
     p.add_argument("--label", default="")
     p = sub.add_parser("pin")
     p.add_argument("key")

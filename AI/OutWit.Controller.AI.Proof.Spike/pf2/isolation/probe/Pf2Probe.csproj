@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- PF-2 spike: the probe run as the "kernel" inside each sandbox. It tries a list of accesses and
+       reports for each whether it was allowed or blocked, with a count or a size, never any content.
+       Native AOT: one binary with no runtime to find inside a sandbox. Not a product project. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>pf2probe</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Proof.Spike.Probe</RootNamespace>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+</Project>

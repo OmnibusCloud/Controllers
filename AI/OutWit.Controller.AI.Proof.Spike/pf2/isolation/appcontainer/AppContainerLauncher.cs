@@ -134,7 +134,7 @@ public static class AppContainerLauncher
         var commandLine = BuildCommandLine(options.Command);
         var result = new SandboxResult
         {
-            CommandLine = commandLine, Container = options.Container, Lpac = options.Lpac, ContainerSid = sidText,
+            CommandLine = commandLine, Container = options.Container, Lpac = options.Lpac, ContainerSid = sidText, Console = options.Console,
             MemoryCap = (ulong)options.MemoryMb << 20, WallCap = options.WallSeconds, GrantSeconds = Math.Round(grantSeconds, 2),
         };
         var job = CreateJobObject(IntPtr.Zero, null);
@@ -178,13 +178,24 @@ public static class AppContainerLauncher
             var startup = new STARTUPINFOEX();
             startup.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
             startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+            if (options.Console == "new")
+            {
+                startup.StartupInfo.dwFlags |= STARTF_USESHOWWINDOW;
+                startup.StartupInfo.wShowWindow = SW_HIDE;
+            }
             startup.StartupInfo.hStdInput = stdin;
             startup.StartupInfo.hStdOutput = stdout;
             startup.StartupInfo.hStdError = stderr;
             startup.lpAttributeList = attributes;
             var environment = Marshal.StringToHGlobalUni(BuildEnvironment(options));
             allocations.Add(environment);
-            var flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS | BELOW_NORMAL_PRIORITY_CLASS;
+            var console = options.Console switch
+            {
+                "hidden" => CREATE_NO_WINDOW,
+                "new" => CREATE_NEW_CONSOLE,
+                _ => DETACHED_PROCESS,
+            };
+            var flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | console | BELOW_NORMAL_PRIORITY_CLASS;
             if (!CreateProcess(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, true, flags, environment,
                     options.JobDir, ref startup, out info))
             {
