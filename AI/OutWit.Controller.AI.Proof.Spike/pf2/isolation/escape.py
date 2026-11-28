@@ -12,7 +12,8 @@ the runner's own files the workflow found (PF2_RUNNER_FILES, separated by ';').
 Modes: raw; linux: bwrap, bwrap-host-ro; macos: sandbox-exec; windows: job, appcontainer,
 appcontainer-nochildren. A mode with the suffix `+clearenv` starts the launcher with a minimal
 environment (PATH, HOME and TMPDIR only) instead of this script's; on Windows `+dacl` gives the
-container's token a default DACL that grants the container (Pf2Sandbox --default-dacl).
+container's token a default DACL that grants the container (Pf2Sandbox --default-dacl), `+filtered`
+starts it from a filtered token (Pf2Sandbox --filtered).
 """
 from __future__ import annotations
 
@@ -163,6 +164,8 @@ def main() -> int:
                 argv.append("--no-children")
             if "dacl" in flags:
                 argv.append("--default-dacl")
+            if "filtered" in flags:
+                argv.append("--filtered")
             argv += ["--"] + cmd
         else:
             argv = isolation.wrap(base, cmd, probe_dir, job)

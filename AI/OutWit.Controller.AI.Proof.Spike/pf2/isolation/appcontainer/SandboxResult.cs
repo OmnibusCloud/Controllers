@@ -22,6 +22,9 @@ public sealed class SandboxResult
     /// <summary>The AppContainer's SID (null without a container).</summary>
     public string? ContainerSid { get; init; }
 
+    /// <summary>Whether the process started from a filtered token (--filtered).</summary>
+    public bool Filtered { get; init; }
+
     /// <summary>The default DACL of the process's token as SDDL (the machine's SIDs by their role).</summary>
     public string? DefaultDacl { get; set; }
 

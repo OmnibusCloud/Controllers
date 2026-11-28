@@ -37,6 +37,7 @@ public sealed class SandboxOptions
                 case "--outside-dir": options.OutsideDir = Path.GetFullPath(Value()); break;
                 case "--console": options.Console = Value(); break;
                 case "--default-dacl": options.DefaultDacl = true; break;
+                case "--filtered": options.Filtered = true; break;
                 case "--": options.Command.AddRange(args.Skip(i + 1)); i = args.Count; break;
                 default: throw new ArgumentException($"unknown option {args[i]}");
             }
@@ -99,6 +100,12 @@ public sealed class SandboxOptions
     /// that the objects it creates without a descriptor (a pipe of <c>CreatePipe</c>) are its own.
     /// </summary>
     public bool DefaultDacl { get; private set; }
+
+    /// <summary>
+    /// Whether the process starts from a filtered token (as User Account Control gives an
+    /// administrator's programs: Administrators for deny only, no privileges, medium integrity).
+    /// </summary>
+    public bool Filtered { get; private set; }
 
     /// <summary>The command and its arguments.</summary>
     public List<string> Command { get; } = [];

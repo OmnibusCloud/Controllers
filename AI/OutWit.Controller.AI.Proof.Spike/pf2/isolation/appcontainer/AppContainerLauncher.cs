@@ -131,10 +131,20 @@ public static class AppContainerLauncher
                 Grant(dir, sidText, false);
             grantSeconds = clock.Elapsed.TotalSeconds;
         }
+        if (options.Filtered)
+        {
+            // A filtered token's Administrators group is for deny only: the user's own SID gets the
+            // same folders, so that the ordinary half of the access check passes too.
+            var user = FilteredToken.UserSid();
+            Grant(options.JobDir, user, true);
+            foreach (var dir in options.ReadDirs)
+                Grant(dir, user, false);
+        }
         var commandLine = BuildCommandLine(options.Command);
         var result = new SandboxResult
         {
             CommandLine = commandLine, Container = options.Container, Lpac = options.Lpac, ContainerSid = sidText, Console = options.Console,
+            Filtered = options.Filtered,
             MemoryCap = (ulong)options.MemoryMb << 20, WallCap = options.WallSeconds, GrantSeconds = Math.Round(grantSeconds, 2),
         };
         var job = CreateJobObject(IntPtr.Zero, null);
@@ -144,8 +154,11 @@ public static class AppContainerLauncher
         var allocations = new List<IntPtr>();
         var attributes = IntPtr.Zero;
         var info = new PROCESS_INFORMATION();
+        var filtered = IntPtr.Zero;
         try
         {
+            if (options.Filtered)
+                filtered = FilteredToken.Create();
             ConfigureJob(job, options);
             var stdin = OpenFile("NUL", false);
             var stdout = OpenFile(options.StdoutPath ?? Path.Combine(options.JobDir, "pf2-stdout.txt"), true);
@@ -196,8 +209,12 @@ public static class AppContainerLauncher
                 _ => DETACHED_PROCESS,
             };
             var flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | console | BELOW_NORMAL_PRIORITY_CLASS;
-            if (!CreateProcess(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, true, flags, environment,
-                    options.JobDir, ref startup, out info))
+            var created = filtered != IntPtr.Zero
+                ? FilteredToken.CreateProcessAsUser(filtered, null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, true, flags,
+                    environment, options.JobDir, ref startup, out info)
+                : CreateProcess(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, true, flags, environment,
+                    options.JobDir, ref startup, out info);
+            if (!created)
             {
                 result.Ending = "could_not_start";
                 result.StartError = new Win32Exception(Marshal.GetLastWin32Error()).Message;
@@ -250,6 +267,8 @@ public static class AppContainerLauncher
             foreach (var allocation in allocations)
                 Marshal.FreeHGlobal(allocation);
             CloseHandle(job);
+            if (filtered != IntPtr.Zero)
+                CloseHandle(filtered);
             if (sid != IntPtr.Zero)
                 FreeSid(sid);
         }

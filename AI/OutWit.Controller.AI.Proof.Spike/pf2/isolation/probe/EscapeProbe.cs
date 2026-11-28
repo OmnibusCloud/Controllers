@@ -306,6 +306,11 @@ public sealed class EscapeProbe
             child.WaitForExit(10000);
             return $"started, exit {child.ExitCode}, {text.Trim().Length} characters read";
         });
+        for (var i = 0; i < ProcessVariants.NAMES.Length; i++)
+        {
+            var index = i;
+            Check($"start cmd.exe {ProcessVariants.NAMES[index]}", () => ProcessVariants.Run(index));
+        }
     }
 
     private static string Pipe(string? sddl)
