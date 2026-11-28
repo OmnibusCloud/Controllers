@@ -22,6 +22,12 @@ public sealed class SandboxResult
     /// <summary>The AppContainer's SID (null without a container).</summary>
     public string? ContainerSid { get; init; }
 
+    /// <summary>With <c>--grant-null</c>: "granted", or what failed.</summary>
+    public string? NullGrant { get; set; }
+
+    /// <summary>With <c>--grant-null</c>: "restored", or what failed.</summary>
+    public string? NullRestore { get; set; }
+
     /// <summary>Whether the process started from a filtered token (--filtered).</summary>
     public bool Filtered { get; init; }
 

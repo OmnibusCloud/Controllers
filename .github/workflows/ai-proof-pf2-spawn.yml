@@ -11,7 +11,10 @@ run-name: "AI Proof PF-2 spawn inside the AppContainer: ${{ github.ref_name }}"
 # firewall's services stopped by an administrator's task running as SYSTEM, and the probe again.
 # Run 2: the launcher's --filtered starts the container from a filtered token (as User Account
 # Control gives an administrator's programs), and the probe starts cmd.exe as Lean does and in
-# variants that change one thing each. Nothing is published. A run starts when pf2/run/spawn.txt changes.
+# variants that change one thing each. Run 3: the cause found (run 46113817733: Lean's runtime opens NUL
+# for the child's standard input, and the null device's DACL has no entry for application packages);
+# the launcher's --grant-null adds one for the container's SID for the run; the comparator tree on
+# kit R1 with it, timed. Nothing is published. A run starts when pf2/run/spawn.txt changes.
 
 on:
   workflow_dispatch:
@@ -110,29 +113,27 @@ jobs:
           GITDIR=$(cygpath -w "$(dirname "$(command -v git)")")
           WP="$(cygpath -w "$PIN_ROOT/bin");$(cygpath -w "$WHICH_DIR");$GITDIR;C:\\Windows\\System32"
           LEAN="$(cygpath -w "$PIN_ROOT/bin/lean.exe")"
-          for variant in container container+filtered job job+filtered; do
+          for variant in container container+null job; do
             extra=""
-            [ "$variant" = "container+filtered" ] && extra="--filtered"
+            [ "$variant" = "container+null" ] && extra="--grant-null"
             [ "$variant" = "job" ] && extra="--no-container"
-            [ "$variant" = "job+filtered" ] && extra="--no-container --filtered"
             echo "=== $variant" >> "$OUT/spawn.txt"
             "$SANDBOX" run --name pf2-spawn --job-dir "$J" --grant-read "$PIN_ROOT" --grant-read "$WHICH_DIR" --processes 16 $extra --env "PATH=$WP" -- "$LEAN" --run spawn.lean which "$(cygpath -w "$WHICH_DIR/which.exe")" >> "$OUT/spawn.txt" 2>&1
           done
-          grep -E "===|spawn |default_dacl|filtered|exit_code|total_processes|start_error" "$OUT/spawn.txt"
+          grep -E "===|spawn |null_grant|null_restore|exit_code|total_processes|start_error" "$OUT/spawn.txt"
           exit 0
       - name: The probe (pipes, the token's default DACL)
         timeout-minutes: 15
         shell: pwsh
         run: |
-          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes "raw,appcontainer,appcontainer+filtered,job+filtered" --work "$env:PF0_WORK\escape" --out "$env:OUT\escape.json" --sandbox $env:SANDBOX
+          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes "raw,appcontainer,appcontainer+null" --work "$env:PF0_WORK\escape" --out "$env:OUT\escape.json" --sandbox $env:SANDBOX
       - name: The comparator tree on R1, with and without the default DACL, timed
         timeout-minutes: 40
         run: |
           set +e
           THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
           A=(--root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels comparator --out "$OUT/comparator.json" --memory-gib 6 --cap-min 15)
-          python "$PF2/isolation/isolation.py" kernels --mode appcontainer "${A[@]}" --repeat 1 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR"
-          python "$PF2/isolation/isolation.py" kernels --mode appcontainer "${A[@]}" --repeat 2 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR" --sandbox-extra=--filtered
+          python "$PF2/isolation/isolation.py" kernels --mode appcontainer "${A[@]}" --repeat 3 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR" --sandbox-extra=--grant-null
           python "$PF2/isolation/isolation.py" kernels --mode job "${A[@]}" --repeat 1 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR"
           python "$PF2/isolation/isolation.py" kernels --mode raw "${A[@]}" --repeat 2
           exit 0

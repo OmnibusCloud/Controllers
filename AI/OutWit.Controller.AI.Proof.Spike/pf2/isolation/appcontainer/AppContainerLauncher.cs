@@ -147,6 +147,14 @@ public static class AppContainerLauncher
             Filtered = options.Filtered,
             MemoryCap = (ulong)options.MemoryMb << 20, WallCap = options.WallSeconds, GrantSeconds = Math.Round(grantSeconds, 2),
         };
+        // Lean's runtime opens NUL for every child it starts without input; the null device must
+        // admit the container for the run (see NullDeviceGrant).
+        string? nullBefore = null;
+        if (options.GrantNull && sidText is not null)
+        {
+            nullBefore = NullDeviceGrant.Grant(sidText, out var said);
+            result.NullGrant = said;
+        }
         var job = CreateJobObject(IntPtr.Zero, null);
         if (job == IntPtr.Zero)
             throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -271,6 +279,8 @@ public static class AppContainerLauncher
                 CloseHandle(filtered);
             if (sid != IntPtr.Zero)
                 FreeSid(sid);
+            if (nullBefore is not null)
+                result.NullRestore = NullDeviceGrant.Restore(nullBefore);
         }
         result.Stdout = Tail(options.StdoutPath ?? Path.Combine(options.JobDir, "pf2-stdout.txt"));
         result.Stderr = Tail(options.StderrPath ?? Path.Combine(options.JobDir, "pf2-stderr.txt"));

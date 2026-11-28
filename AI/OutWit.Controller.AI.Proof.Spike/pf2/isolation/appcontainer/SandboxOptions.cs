@@ -38,6 +38,7 @@ public sealed class SandboxOptions
                 case "--console": options.Console = Value(); break;
                 case "--default-dacl": options.DefaultDacl = true; break;
                 case "--filtered": options.Filtered = true; break;
+                case "--grant-null": options.GrantNull = true; break;
                 case "--": options.Command.AddRange(args.Skip(i + 1)); i = args.Count; break;
                 default: throw new ArgumentException($"unknown option {args[i]}");
             }
@@ -106,6 +107,12 @@ public sealed class SandboxOptions
     /// administrator's programs: Administrators for deny only, no privileges, medium integrity).
     /// </summary>
     public bool Filtered { get; private set; }
+
+    /// <summary>
+    /// Whether the null device admits the container for the run (an entry for its SID in the
+    /// device's DACL, removed after the run): Lean's runtime opens NUL for every child it starts.
+    /// </summary>
+    public bool GrantNull { get; private set; }
 
     /// <summary>The command and its arguments.</summary>
     public List<string> Command { get; } = [];
