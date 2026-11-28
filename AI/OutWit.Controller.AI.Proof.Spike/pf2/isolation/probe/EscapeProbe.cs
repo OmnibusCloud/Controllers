@@ -288,6 +288,46 @@ public sealed class EscapeProbe
                 throw new UnauthorizedAccessException("no window visible");
             return $"{count} windows visible; foreground {(GetForegroundWindow() == IntPtr.Zero ? "none" : "seen")}";
         });
+        // How a child's output reaches its parent: an anonymous pipe, as Lean's IO.Process and .NET's
+        // Process create it (an inheritable handle, the token's default security), and with a
+        // descriptor that grants ALL APPLICATION PACKAGES.
+        m_results.Add(("token: default DACL", "info", Sandbox.TokenDacl.Describe(GetCurrentProcess())));
+        Check("CreatePipe, inheritable, default security", () => Pipe(null));
+        Check("CreatePipe, inheritable, a descriptor granting ALL APPLICATION PACKAGES", () => Pipe("D:(A;;GA;;;WD)(A;;GA;;;AC)"));
+        Check("start a child with its output piped", () =>
+        {
+            var info = new ProcessStartInfo(Path.Combine(System.Environment.SystemDirectory, "cmd.exe"), "/c echo pf2")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+            };
+            using var child = Process.Start(info)!;
+            var text = child.StandardOutput.ReadToEnd();
+            child.WaitForExit(10000);
+            return $"started, exit {child.ExitCode}, {text.Trim().Length} characters read";
+        });
+    }
+
+    private static string Pipe(string? sddl)
+    {
+        var attributes = new SECURITY_ATTRIBUTES { nLength = System.Runtime.InteropServices.Marshal.SizeOf<SECURITY_ATTRIBUTES>(), bInheritHandle = 1 };
+        var descriptor = IntPtr.Zero;
+        if (sddl is not null && !ConvertStringSecurityDescriptorToSecurityDescriptor(sddl, 1, out descriptor, IntPtr.Zero))
+            throw new InvalidOperationException($"descriptor not built, error {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}");
+        attributes.lpSecurityDescriptor = descriptor;
+        try
+        {
+            if (!CreatePipe(out var read, out var write, ref attributes, 0))
+                throw new UnauthorizedAccessException($"CreatePipe failed, error {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}");
+            CloseHandle(read);
+            CloseHandle(write);
+            return "created";
+        }
+        finally
+        {
+            if (descriptor != IntPtr.Zero)
+                LocalFree(descriptor);
+        }
     }
 
     private void Environment()

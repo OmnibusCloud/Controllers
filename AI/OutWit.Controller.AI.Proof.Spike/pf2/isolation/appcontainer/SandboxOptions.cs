@@ -36,6 +36,7 @@ public sealed class SandboxOptions
                 case "--env": options.Environment.Add(Value()); break;
                 case "--outside-dir": options.OutsideDir = Path.GetFullPath(Value()); break;
                 case "--console": options.Console = Value(); break;
+                case "--default-dacl": options.DefaultDacl = true; break;
                 case "--": options.Command.AddRange(args.Skip(i + 1)); i = args.Count; break;
                 default: throw new ArgumentException($"unknown option {args[i]}");
             }
@@ -92,6 +93,12 @@ public sealed class SandboxOptions
     /// hidden console window).
     /// </summary>
     public string Console { get; private set; } = "detached";
+
+    /// <summary>
+    /// Whether the container's token gets a default DACL that grants the container's own SID, so
+    /// that the objects it creates without a descriptor (a pipe of <c>CreatePipe</c>) are its own.
+    /// </summary>
+    public bool DefaultDacl { get; private set; }
 
     /// <summary>The command and its arguments.</summary>
     public List<string> Command { get; } = [];

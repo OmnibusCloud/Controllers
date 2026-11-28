@@ -11,7 +11,8 @@ pipe (Windows), this script's own process id as the "host process", the job's GI
 the runner's own files the workflow found (PF2_RUNNER_FILES, separated by ';').
 Modes: raw; linux: bwrap, bwrap-host-ro; macos: sandbox-exec; windows: job, appcontainer,
 appcontainer-nochildren. A mode with the suffix `+clearenv` starts the launcher with a minimal
-environment (PATH, HOME and TMPDIR only) instead of this script's.
+environment (PATH, HOME and TMPDIR only) instead of this script's; on Windows `+dacl` gives the
+container's token a default DACL that grants the container (Pf2Sandbox --default-dacl).
 """
 from __future__ import annotations
 
@@ -148,9 +149,8 @@ def main() -> int:
         before = (tcp_seen[0], unix_seen[0], pipe_seen[0])
         cmd = [probe] + args + ["--out", out_file]
         env = None
-        base = mode
-        if mode.endswith("+clearenv"):
-            base = mode[:-len("+clearenv")]
+        base, *flags = mode.split("+")
+        if "clearenv" in flags:
             env = {"PATH": "/usr/bin:/bin" if not IS_WINDOWS else os.environ.get("PATH", ""), "HOME": job, "TMPDIR": job}
             if IS_WINDOWS:
                 env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", r"C:\Windows")
@@ -161,6 +161,8 @@ def main() -> int:
                 argv.append("--no-container")
             if base == "appcontainer-nochildren":
                 argv.append("--no-children")
+            if "dacl" in flags:
+                argv.append("--default-dacl")
             argv += ["--"] + cmd
         else:
             argv = isolation.wrap(base, cmd, probe_dir, job)

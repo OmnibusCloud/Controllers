@@ -203,6 +203,14 @@ public static class AppContainerLauncher
                 result.StartError = new Win32Exception(Marshal.GetLastWin32Error()).Message;
                 return result;
             }
+            // The default DACL of the container's token: what every object it creates without a
+            // descriptor of its own (CreatePipe's pipe) grants; set to grant the container itself.
+            result.DefaultDacl = TokenDacl.Describe(info.hProcess);
+            if (options.DefaultDacl && sidText is not null)
+            {
+                result.DefaultDaclSet = TokenDacl.Grant(info.hProcess, sidText);
+                result.DefaultDacl = TokenDacl.Describe(info.hProcess);
+            }
             if (!AssignProcessToJobObject(job, info.hProcess))
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             var clock = Stopwatch.StartNew();

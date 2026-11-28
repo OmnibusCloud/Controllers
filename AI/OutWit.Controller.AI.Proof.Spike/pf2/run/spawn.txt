@@ -1,0 +1,1 @@
+spawn: run 1 (2026-11-28): Lean's child start inside the AppContainer three ways, the pipes, the token's default DACL, on Server 2022 and 2025; the comparator tree with --default-dacl; the firewall's services stopped as SYSTEM

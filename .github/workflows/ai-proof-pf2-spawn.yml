@@ -1,0 +1,167 @@
+name: AI Proof PF-2 spawn inside the AppContainer
+run-name: "AI Proof PF-2 spawn inside the AppContainer: ${{ github.ref_name }}"
+
+# PF-2 of the Proof controller (a spike), follow-up of 2026-11-28, L-32: inside the AppContainer on a
+# hosted windows-2022 runner Lean's IO.Process start fails with "access is denied (5)" while cmd.exe
+# starts children there (run 46110012817). This tells the parts apart, on Windows Server 2022 and
+# 2025: a Lean program starts a child with two pipes (as Lake), with none, with one; the probe
+# creates anonymous pipes with the token's default security and with a descriptor of its own, and
+# reads the token's default DACL; the launcher's --default-dacl gives the container's token a default
+# DACL that grants the container; then the comparator tree on kit R1 with and without it. Last, the
+# firewall's services stopped by an administrator's task running as SYSTEM, and the probe again.
+# Nothing is published. A run starts when pf2/run/spawn.txt changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf2
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/pf2/run/spawn.txt'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ai-proof-pf2-spawn-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PF1: AI/OutWit.Controller.AI.Proof.Spike/pf1
+  PF2: AI/OutWit.Controller.AI.Proof.Spike/pf2
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+  PIN: 4.36.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      OUT: results-spawn-${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Machine
+        run: |
+          pip install -q psutil
+          python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+      - name: Toolchain, the prototype, our which, the probe
+        run: |
+          python "$PF1/lean.py" fetch --version "$PIN" --rid win-x64 --dest "$PF0_WORK/tc" --record "$OUT/toolchain.json" --env-name PIN_ROOT
+          dotnet publish "$PF2/isolation/appcontainer/Pf2Sandbox.csproj" -c Release -o "$PF0_WORK/sandbox" -nologo -v q
+          dotnet publish "$PF2/isolation/which/Pf2Which.csproj" -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$PF0_WORK/which" -nologo -v q
+          dotnet publish "$PF2/isolation/probe/Pf2Probe.csproj" -c Release -r win-x64 -o "$PF0_WORK/probe" -nologo -v q
+          echo "SANDBOX=$PF0_WORK/sandbox/Pf2Sandbox.exe" >> "$GITHUB_ENV"
+          echo "WHICH_DIR=$PF0_WORK/which" >> "$GITHUB_ENV"
+      - name: Kit R1 (PF-1's export and challenge)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(python "$PF2/grh.py" pin R1_KIT_RUN)
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name kit-R1 --dir kit
+          python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, os.environ["PF1"])
+          from common import decompress
+          job = os.path.join(os.environ["PF0_WORK"], "job")
+          os.makedirs(job, exist_ok=True)
+          for name in ("solution", "challenge"):
+              print(name, decompress(f"kit/{name}.ndjson.zst", os.path.join(job, f"{name}.ndjson")))
+          EOF
+          rm -rf kit
+      - name: The system, the session, the firewall
+        shell: pwsh
+        run: |
+          $o = "$env:OUT\session.txt"
+          $v = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+          "os: $($v.ProductName) $($v.DisplayVersion) build $($v.CurrentBuild).$($v.UBR)" | Out-File $o -Encoding utf8
+          "session id: $([System.Diagnostics.Process]::GetCurrentProcess().SessionId)" | Out-File $o -Append -Encoding utf8
+          $uac = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+          "EnableLUA: $($uac.EnableLUA); FilterAdministratorToken: $($uac.FilterAdministratorToken)" | Out-File $o -Append -Encoding utf8
+          whoami /groups | Select-String 'Mandatory Level' | Out-File $o -Append -Encoding utf8
+          netsh advfirewall show allprofiles state | Out-File $o -Append -Encoding utf8
+          Get-Service mpssvc, bfe | Format-Table -AutoSize | Out-String | Out-File $o -Append -Encoding utf8
+          Get-Content $o
+      - name: Starting children inside the AppContainer, three ways, with and without the default DACL
+        timeout-minutes: 15
+        run: |
+          set +e
+          export MSYS_NO_PATHCONV=1
+          J="$PF0_WORK/spawn-job"; mkdir -p "$J"; cp "$PF2/isolation/spawn.lean" "$J/"
+          GITDIR=$(cygpath -w "$(dirname "$(command -v git)")")
+          WP="$(cygpath -w "$PIN_ROOT/bin");$(cygpath -w "$WHICH_DIR");$GITDIR;C:\\Windows\\System32"
+          LEAN="$(cygpath -w "$PIN_ROOT/bin/lean.exe")"
+          for variant in container container+dacl job; do
+            extra=""
+            [ "$variant" = "container+dacl" ] && extra="--default-dacl"
+            [ "$variant" = "job" ] && extra="--no-container"
+            echo "=== $variant" >> "$OUT/spawn.txt"
+            "$SANDBOX" run --name pf2-spawn --job-dir "$J" --grant-read "$PIN_ROOT" --grant-read "$WHICH_DIR" --processes 16 $extra --env "PATH=$WP" -- "$LEAN" --run spawn.lean which "$(cygpath -w "$WHICH_DIR/which.exe")" >> "$OUT/spawn.txt" 2>&1
+          done
+          grep -E "===|spawn |default_dacl|exit_code|total_processes" "$OUT/spawn.txt"
+          exit 0
+      - name: The probe (pipes, the token's default DACL)
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes "raw,appcontainer,appcontainer+dacl" --work "$env:PF0_WORK\escape" --out "$env:OUT\escape.json" --sandbox $env:SANDBOX
+      - name: The comparator tree on R1, with and without the default DACL, timed
+        timeout-minutes: 40
+        run: |
+          set +e
+          THEOREMS=$(python "$PF2/grh.py" pin R1_THEOREMS)
+          A=(--root "$PIN_ROOT" --job "$PF0_WORK/job" --theorems "$THEOREMS" --kernels comparator --out "$OUT/comparator.json" --memory-gib 6 --cap-min 15)
+          python "$PF2/isolation/isolation.py" kernels --mode appcontainer "${A[@]}" --repeat 1 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR"
+          python "$PF2/isolation/isolation.py" kernels --mode appcontainer "${A[@]}" --repeat 2 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR" --sandbox-extra "--default-dacl"
+          python "$PF2/isolation/isolation.py" kernels --mode job "${A[@]}" --repeat 1 --sandbox "$SANDBOX" --which-dir "$WHICH_DIR"
+          python "$PF2/isolation/isolation.py" kernels --mode raw "${A[@]}" --repeat 2
+          exit 0
+      # The firewall's services: an administrator may not stop them from its own session (run
+      # 46110012817: "access is denied"); a task of the same administrator running as SYSTEM tries.
+      # The runner is thrown away after the job.
+      - name: The firewall's services stopped
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $o = "$env:OUT\firewall-services.txt"
+          $work = $env:PF0_WORK -replace '/', '\'
+          $log = "$work\fw-system.txt"
+          $script = "$work\fw-stop.cmd"
+          "@echo off`r`nsc.exe stop mpssvc > `"$log`" 2>&1`r`nping -n 6 127.0.0.1 > nul`r`nsc.exe stop bfe >> `"$log`" 2>&1`r`nping -n 6 127.0.0.1 > nul`r`nsc.exe query mpssvc >> `"$log`" 2>&1`r`nsc.exe query bfe >> `"$log`" 2>&1" | Out-File $script -Encoding ascii
+          schtasks /create /tn pf2-fw-stop /ru SYSTEM /sc once /st 23:59 /tr "cmd.exe /c `"$script`"" /f 2>&1 | Out-File $o -Encoding utf8
+          schtasks /run /tn pf2-fw-stop 2>&1 | Out-File $o -Append -Encoding utf8
+          Start-Sleep -Seconds 30
+          if (Test-Path $log) { Get-Content $log | Out-File $o -Append -Encoding utf8 } else { "no log from the task" | Out-File $o -Append -Encoding utf8 }
+          Get-Service mpssvc, bfe | Format-Table -AutoSize | Out-String | Out-File $o -Append -Encoding utf8
+          Get-Content $o
+          python "$env:PF2\isolation\escape.py" --probe "$env:PF0_WORK\probe\pf2probe.exe" --modes "raw,appcontainer" --work "$env:PF0_WORK\escape-off" --out "$env:OUT\escape-services-off.json" --sandbox $env:SANDBOX
+          schtasks /delete /tn pf2-fw-stop /f 2>&1 | Out-File $o -Append -Encoding utf8
+      - name: Remove the AppContainer profiles
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$PF0_WORK/empty"
+          for name in pf2-kernel pf2-spawn pf2-probe-kernel; do "$SANDBOX" cleanup --name "$name" --job-dir "$PF0_WORK/empty" >> "$OUT/cleanup.txt" 2>&1 || true; done
+          cat "$OUT/cleanup.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: results-spawn-${{ matrix.os }}
+          path: results-spawn-${{ matrix.os }}
+          retention-days: 14

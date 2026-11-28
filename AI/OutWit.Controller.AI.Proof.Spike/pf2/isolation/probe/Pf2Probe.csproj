@@ -18,4 +18,9 @@
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The token's default DACL, read the same way as the launcher reads it. -->
+    <Compile Include="../appcontainer/TokenDacl.cs" Link="TokenDacl.cs" />
+  </ItemGroup>
+
 </Project>

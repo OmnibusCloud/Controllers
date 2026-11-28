@@ -22,6 +22,12 @@ public sealed class SandboxResult
     /// <summary>The AppContainer's SID (null without a container).</summary>
     public string? ContainerSid { get; init; }
 
+    /// <summary>The default DACL of the process's token as SDDL (the machine's SIDs by their role).</summary>
+    public string? DefaultDacl { get; set; }
+
+    /// <summary>With <c>--default-dacl</c>: "set", or what failed.</summary>
+    public string? DefaultDaclSet { get; set; }
+
     /// <summary>The exit code of the first process (null when it could not start).</summary>
     public long? ExitCode { get; set; }
 
